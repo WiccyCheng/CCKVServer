@@ -18,7 +18,10 @@ impl MemTable {
         match self.tables.get(name) {
             Some(table) => table,
             None => {
+                // entry()提供比insert()更多的灵活性，它返回一个枚举值Entry,该枚举代表了键在 DashMap 中的位置。
+                // 通过 Entry，可以决定如何处理该键的值，例如插入新值、更新已有值或执行其他操作。
                 let entry = self.tables.entry(name.to_string()).or_default();
+                // downgrade() 方法将一个 Entry 转换为一个 Ref, 允许只读访问
                 entry.downgrade()
             }
         }
