@@ -16,11 +16,17 @@ async fn main() -> Result<()> {
     let mut client =
         AsyncProstStream::<_, CommandResponse, CommandRequest, _>::from(stream).for_async();
 
-    let cmd = CommandRequest::new_hset("table1", "hello", "world".into());
+    let cmds = vec![
+        CommandRequest::new_hset("table", "hello", "world".into()),
+        CommandRequest::new_hset("table", "hello", "a whole new world".into()),
+        CommandRequest::new_hget("table", "hello"),
+    ];
 
-    client.send(cmd).await?;
-    if let Some(Ok(data)) = client.next().await {
-        info!("Got response {:?}", data);
+    for cmd in cmds {
+        client.send(cmd).await?;
+        if let Some(Ok(data)) = client.next().await {
+            info!("Got response {:?}", data);
+        }
     }
 
     Ok(())
