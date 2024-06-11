@@ -18,6 +18,8 @@ pub trait Storage {
     fn get_all(&self, table: &str) -> Result<Vec<Kvpair>, KvError>;
     /// 遍历 HashTable，返回 kv pair 的 Iterator
     fn get_iter(&self, table: &str) -> Result<Box<dyn Iterator<Item = Kvpair>>, KvError>;
+    /// 从一个 HashTable 里获取多个 key 的 value
+    fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
 }
 
 #[cfg(test)]
@@ -34,6 +36,12 @@ mod tests {
     fn memetable_get_all_should_work() {
         let store = MemTable::new();
         test_get_all(store);
+    }
+
+    #[test]
+    fn memetable_mget_should_work() {
+        let store = MemTable::new();
+        test_mget(store);
     }
 
     fn test_basi_interface(store: impl Storage) {
@@ -78,6 +86,35 @@ mod tests {
                 Kvpair::new("key2", "2".into())
             ]
         );
+    }
+
+    fn test_mget(store: impl Storage) {
+        let _ = store.set("table", "key1".to_string(), "value1".into());
+        let _ = store.set("table", "key2".to_string(), "value2".into());
+        let _ = store.set("table", "key3".to_string(), "value3".into());
+        let _ = store.set("table", "key4".to_string(), "value4".into());
+        let data = store
+            .mget(
+                "table",
+                &vec![
+                    "key1".to_string(),
+                    "key2".to_string(),
+                    "key3".to_string(),
+                    "key4".to_string(),
+                    "not exist key".to_string(),
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            data,
+            vec![
+                Some("value1".into()),
+                Some("value2".into()),
+                Some("value3".into()),
+                Some("value4".into()),
+                None,
+            ]
+        )
     }
 
     // fn test_get_iter(store: impl Storage) {

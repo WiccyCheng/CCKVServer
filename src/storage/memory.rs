@@ -61,4 +61,12 @@ impl Storage for MemTable {
         let _table = self.get_or_create_table(table);
         todo!()
     }
+
+    fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
+        let table = self.get_or_create_table(table);
+        Ok(keys
+            .iter()
+            .map(|key| table.get(key).map(|v| v.value().clone()))
+            .collect())
+    }
 }

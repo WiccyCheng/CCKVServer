@@ -10,6 +10,15 @@ impl CommandService for Hget {
     }
 }
 
+impl CommandService for Hmget {
+    fn execute(self, store: &impl Storage) -> CommandResponse {
+        match store.mget(&self.table, &self.keys) {
+            Ok(v) => v.into(),
+            Err(e) => e.into(),
+        }
+    }
+}
+
 impl CommandService for Hgetall {
     fn execute(self, store: &impl Storage) -> CommandResponse {
         match store.get_all(&self.table) {
@@ -91,12 +100,44 @@ mod tests {
         assert_res_ok(res, &[], pairs);
     }
 
+    #[test]
+    fn hmget_should_work() {
+        let store = MemTable::new();
+        let cmds = vec![
+            CommandRequest::new_hset("table", "key1", 1.into()),
+            CommandRequest::new_hset("table", "key2", 2.into()),
+            CommandRequest::new_hset("table", "key3", 3.into()),
+            CommandRequest::new_hset("table", "key4", 4.into()),
+        ];
+        for cmd in cmds {
+            dispatch(cmd, &store);
+        }
+
+        let cmd = CommandRequest::new_hmget(
+            "table",
+            vec!["key1", "key2", "not exist key", "key3", "key4"],
+        );
+        let res = dispatch(cmd, &store);
+        assert_res_ok(
+            res,
+            &[
+                1.into(),
+                2.into(),
+                pb::abi::Value { value: None },
+                3.into(),
+                4.into(),
+            ],
+            &[],
+        );
+    }
+
     // 从 Request 中获得 Responese 目前只处理 HGET/HSET/HGETALL
     fn dispatch(cmd: CommandRequest, store: &impl Storage) -> CommandResponse {
         match cmd.request_data.unwrap() {
             RequestData::Hget(v) => v.execute(store),
             RequestData::Hgetall(v) => v.execute(store),
             RequestData::Hset(v) => v.execute(store),
+            RequestData::Hmget(param) => param.execute(store),
             _ => todo!(),
         }
     }
