@@ -35,6 +35,26 @@ impl CommandRequest {
         }
     }
 
+    /// 创建 HDEL 命令
+    pub fn new_hdel(table: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hdel(Hdel {
+                table: table.into(),
+                key: key.into(),
+            })),
+        }
+    }
+
+    /// 创建 HEXIST 命令
+    pub fn new_hexist(table: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hexist(Hexist {
+                table: table.into(),
+                key: key.into(),
+            })),
+        }
+    }
+
     /// 创建 HMGET 命令
     pub fn new_hmget(table: impl Into<String>, keys: Vec<impl Into<String>>) -> Self {
         Self {
@@ -54,6 +74,25 @@ impl CommandRequest {
             })),
         }
     }
+    /// 创建 HMDEL 命令
+    pub fn new_hmdel(table: impl Into<String>, keys: Vec<impl Into<String>>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmdel(Hmdel {
+                table: table.into(),
+                keys: keys.into_iter().map(|key| key.into()).collect(),
+            })),
+        }
+    }
+
+    /// 创建 HMEXIST 命令
+    pub fn new_hmexist(table: impl Into<String>, keys: Vec<impl Into<String>>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmexist(Hmexist {
+                table: table.into(),
+                keys: keys.into_iter().map(|key| key.into()).collect(),
+            })),
+        }
+    }
 }
 
 impl Kvpair {
@@ -62,6 +101,15 @@ impl Kvpair {
         Self {
             key: key.into(),
             value: Some(value),
+        }
+    }
+}
+
+/// 从bool转成Value
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Self {
+            value: Some(value::Value::Bool(v)),
         }
     }
 }
@@ -132,6 +180,17 @@ impl From<KvError> for CommandResponse {
         };
 
         result
+    }
+}
+
+/// 从Vec<Value> 转换成 CommandResponse
+impl From<Vec<Value>> for CommandResponse {
+    fn from(v: Vec<Value>) -> Self {
+        Self {
+            status: StatusCode::OK.as_u16() as _,
+            values: v,
+            ..Default::default()
+        }
     }
 }
 

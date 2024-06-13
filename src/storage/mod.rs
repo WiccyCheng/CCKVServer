@@ -22,6 +22,10 @@ pub trait Storage {
     fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
     /// 从一个 HashTable 里设置多个 key 的 value
     fn mset(&self, table: &str, pairs: Vec<Kvpair>) -> Result<Vec<Option<Value>>, KvError>;
+    /// 从一个 HashTable 中删除多个 key
+    fn mdel(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
+    /// 查看 HashTable 中是否有多个 key
+    fn mcontains(&self, table: &str, keys: &Vec<String>) -> Result<Vec<bool>, KvError>;
 }
 
 #[cfg(test)]
@@ -109,8 +113,8 @@ mod tests {
             Kvpair::new("key3", "value3".into()),
             Kvpair::new("key4", "value4".into()),
         ];
+        //mset, 检测被覆盖的值是否被正确返回
         let result = store.mset("table", pairs).unwrap();
-        //校验之前设置的值是否被正确返回
         assert_eq!(
             result,
             vec![
@@ -121,7 +125,7 @@ mod tests {
             ]
         );
 
-        //检测值是否设置成功
+        //mget, 检测值是否设置成功
         let data = store
             .mget(
                 "table",
@@ -144,6 +148,42 @@ mod tests {
                 None,
             ]
         );
+
+        // mdel, 返回之前删除的值
+        let result = store
+            .mdel(
+                "table",
+                &vec![
+                    "key1".to_string(),
+                    "key2".to_string(),
+                    "key3".to_string(),
+                    "key4".to_string(),
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            result,
+            vec![
+                Some("value1".into()),
+                Some("value2".into()),
+                Some("value3".into()),
+                Some("value4".into()),
+            ]
+        );
+
+        // mcontains, 确认是否值都被删除
+        let result = store
+            .mcontains(
+                "table",
+                &vec![
+                    "key1".to_string(),
+                    "key2".to_string(),
+                    "key3".to_string(),
+                    "key4".to_string(),
+                ],
+            )
+            .unwrap();
+        assert_eq!(result, vec![false, false, false, false,]);
     }
 
     // fn test_get_iter(store: impl Storage) {

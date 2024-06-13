@@ -77,4 +77,17 @@ impl Storage for MemTable {
             .map(|pair| table.insert(pair.key, pair.value.unwrap()))
             .collect())
     }
+
+    fn mdel(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
+        let table = self.get_or_create_table(table);
+        Ok(keys
+            .iter()
+            .map(|key| table.remove(key).map(|(_, v)| v))
+            .collect())
+    }
+
+    fn mcontains(&self, table: &str, keys: &Vec<String>) -> Result<Vec<bool>, KvError> {
+        let table = self.get_or_create_table(table);
+        Ok(keys.iter().map(|key| table.contains_key(key)).collect())
+    }
 }

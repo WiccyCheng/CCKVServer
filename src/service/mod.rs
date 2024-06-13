@@ -51,11 +51,15 @@ impl<Store: Storage> Service<Store> {
 pub fn dispatch(cmd: CommandRequest, store: &impl Storage) -> CommandResponse {
     match cmd.request_data {
         Some(RequestData::Hget(param)) => param.execute(store),
-        Some(RequestData::Hgetall(param)) => param.execute(store),
         Some(RequestData::Hset(param)) => param.execute(store),
+        Some(RequestData::Hdel(param)) => param.execute(store),
+        Some(RequestData::Hexist(param)) => param.execute(store),
         Some(RequestData::Hmget(param)) => param.execute(store),
+        Some(RequestData::Hmset(param)) => param.execute(store),
+        Some(RequestData::Hmdel(param)) => param.execute(store),
+        Some(RequestData::Hmexist(param)) => param.execute(store),
+        Some(RequestData::Hgetall(param)) => param.execute(store),
         None => KvError::InvaildCommand("Request has no data".into()).into(),
-        _ => KvError::Internal("Not implemented".into()).into(),
     }
 }
 
