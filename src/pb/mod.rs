@@ -44,6 +44,16 @@ impl CommandRequest {
             })),
         }
     }
+
+    /// 创建 HMSET 命令
+    pub fn new_hmset(table: impl Into<String>, pairs: Vec<impl Into<Kvpair>>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmset(Hmset {
+                table: table.into(),
+                pairs: pairs.into_iter().map(|pair| pair.into()).collect(),
+            })),
+        }
+    }
 }
 
 impl Kvpair {

@@ -20,6 +20,8 @@ pub trait Storage {
     fn get_iter(&self, table: &str) -> Result<Box<dyn Iterator<Item = Kvpair>>, KvError>;
     /// 从一个 HashTable 里获取多个 key 的 value
     fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
+    /// 从一个 HashTable 里设置多个 key 的 value
+    fn mset(&self, table: &str, pairs: Vec<Kvpair>) -> Result<Vec<Option<Value>>, KvError>;
 }
 
 #[cfg(test)]
@@ -39,9 +41,9 @@ mod tests {
     }
 
     #[test]
-    fn memetable_mget_should_work() {
+    fn memetable_mget_and_mset_should_work() {
         let store = MemTable::new();
-        test_mget(store);
+        test_mfun(store);
     }
 
     fn test_basi_interface(store: impl Storage) {
@@ -88,11 +90,38 @@ mod tests {
         );
     }
 
-    fn test_mget(store: impl Storage) {
-        let _ = store.set("table", "key1".to_string(), "value1".into());
-        let _ = store.set("table", "key2".to_string(), "value2".into());
-        let _ = store.set("table", "key3".to_string(), "value3".into());
-        let _ = store.set("table", "key4".to_string(), "value4".into());
+    fn test_mfun(store: impl Storage) {
+        // 先对key1 和key3赋值，在调用mset()时会覆盖这两个值，观测mset()的返回值以确定是否被覆盖
+        let _ = store.set(
+            "table",
+            "key1".to_string(),
+            "this value should be covered".into(),
+        );
+        let _ = store.set(
+            "table",
+            "key3".to_string(),
+            "this value should be covered".into(),
+        );
+
+        let pairs: Vec<Kvpair> = vec![
+            Kvpair::new("key1", "value1".into()),
+            Kvpair::new("key2", "value2".into()),
+            Kvpair::new("key3", "value3".into()),
+            Kvpair::new("key4", "value4".into()),
+        ];
+        let result = store.mset("table", pairs).unwrap();
+        //校验之前设置的值是否被正确返回
+        assert_eq!(
+            result,
+            vec![
+                Some("this value should be covered".into()),
+                None,
+                Some("this value should be covered".into()),
+                None
+            ]
+        );
+
+        //检测值是否设置成功
         let data = store
             .mget(
                 "table",
@@ -114,7 +143,7 @@ mod tests {
                 Some("value4".into()),
                 None,
             ]
-        )
+        );
     }
 
     // fn test_get_iter(store: impl Storage) {

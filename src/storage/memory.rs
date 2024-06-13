@@ -69,4 +69,12 @@ impl Storage for MemTable {
             .map(|key| table.get(key).map(|v| v.value().clone()))
             .collect())
     }
+
+    fn mset(&self, table: &str, pairs: Vec<Kvpair>) -> Result<Vec<Option<Value>>, KvError> {
+        let table = self.get_or_create_table(table);
+        Ok(pairs
+            .into_iter()
+            .map(|pair| table.insert(pair.key, pair.value.unwrap()))
+            .collect())
+    }
 }

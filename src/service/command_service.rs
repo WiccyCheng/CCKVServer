@@ -41,6 +41,15 @@ impl CommandService for Hset {
     }
 }
 
+impl CommandService for Hmset {
+    fn execute(self, store: &impl Storage) -> CommandResponse {
+        match store.mset(&self.table, self.pairs) {
+            Ok(v) => v.into(),
+            Err(e) => e.into(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,17 +110,19 @@ mod tests {
     }
 
     #[test]
-    fn hmget_should_work() {
+    fn hmfun_should_work() {
         let store = MemTable::new();
-        let cmds = vec![
-            CommandRequest::new_hset("table", "key1", 1.into()),
-            CommandRequest::new_hset("table", "key2", 2.into()),
-            CommandRequest::new_hset("table", "key3", 3.into()),
-            CommandRequest::new_hset("table", "key4", 4.into()),
-        ];
-        for cmd in cmds {
-            dispatch(cmd, &store);
-        }
+
+        let cmd = CommandRequest::new_hmset(
+            "table",
+            vec![
+                Kvpair::new("key1", 1.into()),
+                Kvpair::new("key2", 2.into()),
+                Kvpair::new("key3", 3.into()),
+                Kvpair::new("key4", 4.into()),
+            ],
+        );
+        dispatch(cmd, &store);
 
         let cmd = CommandRequest::new_hmget(
             "table",
@@ -138,6 +149,7 @@ mod tests {
             RequestData::Hgetall(v) => v.execute(store),
             RequestData::Hset(v) => v.execute(store),
             RequestData::Hmget(param) => param.execute(store),
+            RequestData::Hmset(param) => param.execute(store),
             _ => todo!(),
         }
     }
