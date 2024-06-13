@@ -14,6 +14,7 @@ pub trait CommandService {
 
 /// Service 数据结构
 pub struct Service<Store = MemTable> {
+    //TODO(Wiccy): 通过对key做哈希映射将操作分散到多个线程各自持有的HashMap中，避免加锁
     inner: Arc<ServiceInner<Store>>,
 }
 
