@@ -105,6 +105,13 @@ impl Kvpair {
     }
 }
 
+/// 从(String, Value)转成Kvpair
+impl From<(String, Value)> for Kvpair {
+    fn from(data: (String, Value)) -> Self {
+        Kvpair::new(data.0, data.1)
+    }
+}
+
 /// 从bool转成Value
 impl From<bool> for Value {
     fn from(v: bool) -> Self {

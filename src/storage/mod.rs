@@ -17,7 +17,7 @@ pub trait Storage {
     /// 遍历 HashTable，返回所有 kv pair（这个接口不好）
     fn get_all(&self, table: &str) -> Result<Vec<Kvpair>, KvError>;
     /// 遍历 HashTable，返回 kv pair 的 Iterator
-    fn get_iter(&self, table: &str) -> Result<Box<dyn Iterator<Item = Kvpair>>, KvError>;
+    fn get_iter(&self, table: &str) -> Result<impl Iterator<Item = Kvpair>, KvError>;
     /// 从一个 HashTable 里获取多个 key 的 value
     fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
     /// 从一个 HashTable 里设置多个 key 的 value
@@ -28,6 +28,29 @@ pub trait Storage {
     fn mcontains(&self, table: &str, keys: &Vec<String>) -> Result<Vec<bool>, KvError>;
 }
 
+//提供 Storage Iterator, 这样trait的实现者只需要把他们的Iterator, 提供给 StorageIter, 并且保证next()传出的类型实现了Into<Kvpair>
+pub struct StorageIter<T> {
+    data: T,
+}
+
+impl<T> StorageIter<T> {
+    pub fn new(data: T) -> Self {
+        Self { data }
+    }
+}
+
+impl<T> Iterator for StorageIter<T>
+where
+    T: Iterator,
+    T::Item: Into<Kvpair>,
+{
+    type Item = Kvpair;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.data.next().map(|v| v.into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -36,6 +59,12 @@ mod tests {
     fn memetable_basic_interface_should_work() {
         let store = MemTable::new();
         test_basi_interface(store);
+    }
+
+    #[test]
+    fn memtable_iter_should_work() {
+        let store = MemTable::new();
+        test_get_iter(store);
     }
 
     #[test]
@@ -186,17 +215,17 @@ mod tests {
         assert_eq!(result, vec![false, false, false, false,]);
     }
 
-    // fn test_get_iter(store: impl Storage) {
-    //     store.set("table", "key1".to_string(), "1".into()).unwrap();
-    //     store.set("table", "key2".to_string(), "2".into()).unwrap();
-    //     let mut data: Vec<_> = store.get_iter("table").unwrap().collect();
-    //     data.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    //     assert_eq!(
-    //         data,
-    //         vec![
-    //             Kvpair::new("key1", "1".into()),
-    //             Kvpair::new("key2", "2".into())
-    //         ]
-    //     );
-    // }
+    fn test_get_iter(store: impl Storage) {
+        store.set("table", "key1".to_string(), "1".into()).unwrap();
+        store.set("table", "key2".to_string(), "2".into()).unwrap();
+        let mut data: Vec<_> = store.get_iter("table").unwrap().collect();
+        data.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert_eq!(
+            data,
+            vec![
+                Kvpair::new("key1", "1".into()),
+                Kvpair::new("key2", "2".into())
+            ]
+        );
+    }
 }
