@@ -60,8 +60,10 @@ impl Storage for MemTable {
     fn get_iter(&self, table: &str) -> Result<impl Iterator<Item = Kvpair>, KvError> {
         let table = self.get_or_create_table(table).clone();
         Ok(StorageIter::new(table.into_iter()))
-    }
-
+        }
+        
+    // TODO(Wiccy): these mfun() can be provided by combination of fun().
+    // Should not be done by Storage layer
     fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
         let table = self.get_or_create_table(table);
         Ok(keys
