@@ -60,22 +60,6 @@ impl Storage for SledDb {
         let iter = StorageIter::new(self.0.scan_prefix(prefix));
         Ok(iter)
     }
-
-    fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
-        todo!()
-    }
-
-    fn mset(&self, table: &str, pairs: Vec<Kvpair>) -> Result<Vec<Option<Value>>, KvError> {
-        todo!()
-    }
-
-    fn mdel(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
-        todo!()
-    }
-
-    fn mcontains(&self, table: &str, keys: &Vec<String>) -> Result<Vec<bool>, KvError> {
-        todo!()
-    }
 }
 
 impl From<Result<(IVec, IVec), sled::Error>> for Kvpair {

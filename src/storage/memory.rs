@@ -66,35 +66,17 @@ impl Storage for MemTable {
         let table = self.get_or_create_table(table).clone();
         Ok(StorageIter::new(table.into_iter()))
     }
+}
 
-    // TODO(Wiccy): these mfun() can be provided by combination of fun().
-    // Should not be done by Storage layer
-    fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
-        let table = self.get_or_create_table(table);
-        Ok(keys
-            .iter()
-            .map(|key| table.get(key).map(|v| v.value().clone()))
-            .collect())
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    fn mset(&self, table: &str, pairs: Vec<Kvpair>) -> Result<Vec<Option<Value>>, KvError> {
-        let table = self.get_or_create_table(table);
-        Ok(pairs
-            .into_iter()
-            .map(|pair| table.insert(pair.key, pair.value.unwrap()))
-            .collect())
-    }
-
-    fn mdel(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
-        let table = self.get_or_create_table(table);
-        Ok(keys
-            .iter()
-            .map(|key| table.remove(key).map(|(_, v)| v))
-            .collect())
-    }
-
-    fn mcontains(&self, table: &str, keys: &Vec<String>) -> Result<Vec<bool>, KvError> {
-        let table = self.get_or_create_table(table);
-        Ok(keys.iter().map(|key| table.contains_key(key)).collect())
+    #[test]
+    fn get_or_create_table_should_work() {
+        let store = MemTable::new();
+        assert!(!store.tables.contains_key("table"));
+        store.get_or_create_table("table");
+        assert!(store.tables.contains_key("table"));
     }
 }

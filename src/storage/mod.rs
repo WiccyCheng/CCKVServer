@@ -25,14 +25,6 @@ pub trait Storage {
     fn get_all(&self, table: &str) -> Result<Vec<Kvpair>, KvError>;
     /// 遍历 HashTable，返回 kv pair 的 Iterator
     fn get_iter(&self, table: &str) -> Result<impl Iterator<Item = Kvpair>, KvError>;
-    /// 从一个 HashTable 里获取多个 key 的 value
-    fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
-    /// 从一个 HashTable 里设置多个 key 的 value
-    fn mset(&self, table: &str, pairs: Vec<Kvpair>) -> Result<Vec<Option<Value>>, KvError>;
-    /// 从一个 HashTable 中删除多个 key
-    fn mdel(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError>;
-    /// 查看 HashTable 中是否有多个 key
-    fn mcontains(&self, table: &str, keys: &Vec<String>) -> Result<Vec<bool>, KvError>;
 }
 
 //提供 Storage Iterator, 这样trait的实现者只需要把他们的Iterator, 提供给 StorageIter, 并且保证next()传出的类型实现了Into<Kvpair>
@@ -80,12 +72,6 @@ mod tests {
     fn memetable_get_all_should_work() {
         let store = MemTable::new();
         test_get_all(store);
-    }
-
-    #[test]
-    fn memetable_mget_and_mset_should_work() {
-        let store = MemTable::new();
-        test_mfun(store);
     }
 
     #[test]
@@ -151,90 +137,6 @@ mod tests {
                 Kvpair::new("key2", "2".into())
             ]
         );
-    }
-
-    fn test_mfun(store: impl Storage) {
-        // 先对key1 和key3赋值，在调用mset()时会覆盖这两个值，观测mset()的返回值以确定是否被覆盖
-        let _ = store.set("table", "key1".to_string(), "this value should be covered");
-        let _ = store.set("table", "key3".to_string(), "this value should be covered");
-
-        let pairs: Vec<Kvpair> = vec![
-            Kvpair::new("key1", "value1".into()),
-            Kvpair::new("key2", "value2".into()),
-            Kvpair::new("key3", "value3".into()),
-            Kvpair::new("key4", "value4".into()),
-        ];
-        //mset, 检测被覆盖的值是否被正确返回
-        let result = store.mset("table", pairs).unwrap();
-        assert_eq!(
-            result,
-            vec![
-                Some("this value should be covered".into()),
-                None,
-                Some("this value should be covered".into()),
-                None
-            ]
-        );
-
-        //mget, 检测值是否设置成功
-        let data = store
-            .mget(
-                "table",
-                &vec![
-                    "key1".to_string(),
-                    "key2".to_string(),
-                    "key3".to_string(),
-                    "key4".to_string(),
-                    "not exist key".to_string(),
-                ],
-            )
-            .unwrap();
-        assert_eq!(
-            data,
-            vec![
-                Some("value1".into()),
-                Some("value2".into()),
-                Some("value3".into()),
-                Some("value4".into()),
-                None,
-            ]
-        );
-
-        // mdel, 返回之前删除的值
-        let result = store
-            .mdel(
-                "table",
-                &vec![
-                    "key1".to_string(),
-                    "key2".to_string(),
-                    "key3".to_string(),
-                    "key4".to_string(),
-                ],
-            )
-            .unwrap();
-        assert_eq!(
-            result,
-            vec![
-                Some("value1".into()),
-                Some("value2".into()),
-                Some("value3".into()),
-                Some("value4".into()),
-            ]
-        );
-
-        // mcontains, 确认是否值都被删除
-        let result = store
-            .mcontains(
-                "table",
-                &vec![
-                    "key1".to_string(),
-                    "key2".to_string(),
-                    "key3".to_string(),
-                    "key4".to_string(),
-                ],
-            )
-            .unwrap();
-        assert_eq!(result, vec![false, false, false, false,]);
     }
 
     fn test_get_iter(store: impl Storage) {

@@ -12,10 +12,14 @@ impl CommandService for Hget {
 
 impl CommandService for Hmget {
     fn execute(self, store: &impl Storage) -> CommandResponse {
-        match store.mget(&self.table, &self.keys) {
-            Ok(v) => v.into(),
-            Err(e) => e.into(),
-        }
+        self.keys
+            .iter()
+            .map(|key| match store.get(&self.table, key) {
+                Ok(Some(v)) => v,
+                _ => Value::default(),
+            })
+            .collect::<Vec<_>>()
+            .into()
     }
 }
 
@@ -43,10 +47,18 @@ impl CommandService for Hset {
 
 impl CommandService for Hmset {
     fn execute(self, store: &impl Storage) -> CommandResponse {
-        match store.mset(&self.table, self.pairs) {
-            Ok(v) => v.into(),
-            Err(e) => e.into(),
-        }
+        let pairs = self.pairs;
+        let table = self.table;
+        pairs
+            .into_iter()
+            .map(
+                |pair| match store.set(&table, pair.key, pair.value.unwrap_or_default()) {
+                    Ok(Some(v)) => v,
+                    _ => Value::default(),
+                },
+            )
+            .collect::<Vec<_>>()
+            .into()
     }
 }
 
@@ -62,10 +74,14 @@ impl CommandService for Hdel {
 
 impl CommandService for Hmdel {
     fn execute(self, store: &impl Storage) -> CommandResponse {
-        match store.mdel(&self.table, &self.keys) {
-            Ok(v) => v.into(),
-            Err(e) => e.into(),
-        }
+        self.keys
+            .iter()
+            .map(|key| match store.del(&self.table, key) {
+                Ok(Some(v)) => v,
+                _ => Value::default(),
+            })
+            .collect::<Vec<_>>()
+            .into()
     }
 }
 
@@ -80,14 +96,14 @@ impl CommandService for Hexist {
 
 impl CommandService for Hmexist {
     fn execute(self, store: &impl Storage) -> CommandResponse {
-        match store.mcontains(&self.table, &self.keys) {
-            Ok(v) => v
-                .into_iter()
-                .map(|v| Value::from(v))
-                .collect::<Vec<Value>>()
-                .into(),
-            Err(e) => e.into(),
-        }
+        self.keys
+            .iter()
+            .map(|key| match store.contains(&self.table, key) {
+                Ok(v) => v.into(),
+                _ => Value::default(),
+            })
+            .collect::<Vec<_>>()
+            .into()
     }
 }
 
@@ -182,6 +198,7 @@ mod tests {
     }
 
     #[test]
+    //TODO(Wiccy): split each mfun so that the test result can be more readable
     fn hmfun_should_work() {
         let store = MemTable::new();
 

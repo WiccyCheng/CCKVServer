@@ -203,22 +203,6 @@ impl From<Vec<Value>> for CommandResponse {
     }
 }
 
-/// 从Vec<Option<Value>> 转换成 CommandResponse
-impl From<Vec<Option<Value>>> for CommandResponse {
-    fn from(v: Vec<Option<Value>>) -> Self {
-        // 保留 None 值，因为对于一组查询而言，某个值为 None 是正常的
-        let values = v
-            .into_iter()
-            .map(|v| v.unwrap_or_default().into())
-            .collect();
-        Self {
-            status: StatusCode::OK.as_u16() as _,
-            values,
-            ..Default::default()
-        }
-    }
-}
-
 impl TryFrom<Value> for i64 {
     type Error = KvError;
 
