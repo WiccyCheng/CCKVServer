@@ -1,6 +1,8 @@
 mod memory;
+mod sleddb;
 
 pub use memory::MemTable;
+pub use sleddb::SledDb;
 
 use crate::{KvError, Kvpair, Value};
 
@@ -9,7 +11,12 @@ pub trait Storage {
     /// 从一个 HashTable 里获取一个 key 的 value
     fn get(&self, table: &str, key: &str) -> Result<Option<Value>, KvError>;
     /// 从一个 HashTable 里设置一个 key 的 value，返回旧的 value
-    fn set(&self, table: &str, key: String, value: Value) -> Result<Option<Value>, KvError>;
+    fn set(
+        &self,
+        table: &str,
+        key: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Result<Option<Value>, KvError>;
     /// 查看 HashTable 中是否有 key
     fn contains(&self, table: &str, key: &str) -> Result<bool, KvError>;
     /// 从 HashTable 中删除一个 key
@@ -53,6 +60,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -79,12 +88,33 @@ mod tests {
         test_mfun(store);
     }
 
+    #[test]
+    fn selddb_basic_interface_should_work() {
+        let dir = tempdir().unwrap();
+        let store = SledDb::new(dir);
+        test_basi_interface(store);
+    }
+
+    #[test]
+    fn selddb_iter_should_work() {
+        let dir = tempdir().unwrap();
+        let store = SledDb::new(dir);
+        test_get_iter(store);
+    }
+
+    #[test]
+    fn selddb_get_all_should_work() {
+        let dir = tempdir().unwrap();
+        let store = SledDb::new(dir);
+        test_get_all(store);
+    }
+
     fn test_basi_interface(store: impl Storage) {
         // 第一次set会创建table，插入key并返回None（之前没值）
-        let v = store.set("table", "key".to_string(), "value".into());
+        let v = store.set("table", "key".to_string(), "value");
         assert!(v.unwrap().is_none());
         // 再次set会同样的key会更新，并返回之前的值
-        let v1 = store.set("table", "key".to_string(), "value1".into());
+        let v1 = store.set("table", "key".to_string(), "value1");
         assert_eq!(v1, Ok(Some("value".into())));
 
         //get存在的key会得到最新的值
@@ -110,8 +140,8 @@ mod tests {
     }
 
     fn test_get_all(store: impl Storage) {
-        store.set("table", "key1".to_string(), "1".into()).unwrap();
-        store.set("table", "key2".to_string(), "2".into()).unwrap();
+        store.set("table", "key1".to_string(), "1").unwrap();
+        store.set("table", "key2".to_string(), "2").unwrap();
         let mut data = store.get_all("table").unwrap();
         data.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(
@@ -125,16 +155,8 @@ mod tests {
 
     fn test_mfun(store: impl Storage) {
         // 先对key1 和key3赋值，在调用mset()时会覆盖这两个值，观测mset()的返回值以确定是否被覆盖
-        let _ = store.set(
-            "table",
-            "key1".to_string(),
-            "this value should be covered".into(),
-        );
-        let _ = store.set(
-            "table",
-            "key3".to_string(),
-            "this value should be covered".into(),
-        );
+        let _ = store.set("table", "key1".to_string(), "this value should be covered");
+        let _ = store.set("table", "key3".to_string(), "this value should be covered");
 
         let pairs: Vec<Kvpair> = vec![
             Kvpair::new("key1", "value1".into()),
@@ -216,8 +238,8 @@ mod tests {
     }
 
     fn test_get_iter(store: impl Storage) {
-        store.set("table", "key1".to_string(), "1".into()).unwrap();
-        store.set("table", "key2".to_string(), "2".into()).unwrap();
+        store.set("table", "key1".to_string(), "1").unwrap();
+        store.set("table", "key2".to_string(), "2").unwrap();
         let mut data: Vec<_> = store.get_iter("table").unwrap().collect();
         data.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(

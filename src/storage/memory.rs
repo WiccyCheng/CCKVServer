@@ -34,9 +34,14 @@ impl Storage for MemTable {
         Ok(table.get(key).map(|v| v.value().clone()))
     }
 
-    fn set(&self, table: &str, key: String, value: Value) -> Result<Option<Value>, KvError> {
+    fn set(
+        &self,
+        table: &str,
+        key: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Result<Option<Value>, KvError> {
         let table = self.get_or_create_table(table);
-        Ok(table.insert(key, value))
+        Ok(table.insert(key.into(), value.into()))
     }
 
     fn contains(&self, table: &str, key: &str) -> Result<bool, KvError> {
@@ -60,8 +65,8 @@ impl Storage for MemTable {
     fn get_iter(&self, table: &str) -> Result<impl Iterator<Item = Kvpair>, KvError> {
         let table = self.get_or_create_table(table).clone();
         Ok(StorageIter::new(table.into_iter()))
-        }
-        
+    }
+
     // TODO(Wiccy): these mfun() can be provided by combination of fun().
     // Should not be done by Storage layer
     fn mget(&self, table: &str, keys: &Vec<String>) -> Result<Vec<Option<Value>>, KvError> {
