@@ -1,14 +1,21 @@
 use anyhow::Result;
-use async_prost::AsyncProstStream;
+use bytes::Bytes;
 use futures::prelude::*;
-use kv::{CommandRequest, CommandResponse, Service, ServiceInner, SledDb};
+use kv::{CommandRequest, Service, ServiceInner, SledDb};
+use prost::Message;
 use tokio::net::TcpListener;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let service: Service<SledDb> = ServiceInner::new(SledDb::new("/tmp/kvserver")).into();
+    let service: Service<SledDb> = ServiceInner::new(SledDb::new("/tmp/kvserver"))
+        .fn_before_send(|res| match res.message.as_ref() {
+            "" => res.message = "altered. Original message is empty.".into(),
+            s => res.message = format!("altered: {}", s),
+        })
+        .into();
     let addr = "127.0.0.1:9527";
     let listener = TcpListener::bind(addr).await?;
     info!("Start listening on {}", addr);
@@ -16,13 +23,14 @@ async fn main() -> Result<()> {
         let (stream, addr) = listener.accept().await?;
         info!("Client {:?} connected", addr);
         let svc = service.clone();
+        // 使用默认 4 字节长度作为消息帧的头部
+        let mut stream = Framed::new(stream, LengthDelimitedCodec::new());
         tokio::spawn(async move {
-            let mut stream =
-                AsyncProstStream::<_, CommandRequest, CommandResponse, _>::from(stream).for_async();
             while let Some(Ok(cmd)) = stream.next().await {
+                let cmd = CommandRequest::decode(cmd).unwrap();
                 info!("Got a new command: {:?}", cmd);
                 let res = svc.execute(cmd);
-                stream.send(res).await.unwrap();
+                stream.send(Bytes::from(res.encode_to_vec())).await.unwrap();
             }
             info!("Client {:?} disconnected", addr);
         });
