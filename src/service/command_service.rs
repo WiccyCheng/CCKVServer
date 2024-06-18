@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn hset_should_work() {
         let store = MemTable::new();
-        let cmd = CommandRequest::new_hset("table", "hello", "world".into());
+        let cmd = CommandRequest::new_hset("table", "hello", "world");
         let res = dispatch(cmd.clone(), &store);
         // 第一次插入返回之前的值为空
         assert_res_ok(res, &[Value::default()], &[]);
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn hget_should_work() {
         let store = MemTable::new();
-        let cmd = CommandRequest::new_hset("score", "u1", 10.into());
+        let cmd = CommandRequest::new_hset("score", "u1", 10);
         dispatch(cmd, &store);
         let cmd = CommandRequest::new_hget("score", "u1");
         let res = dispatch(cmd, &store);
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn hdel_should_work() {
         let store = MemTable::new();
-        let cmd = CommandRequest::new_hset("table", "key", 10.into());
+        let cmd = CommandRequest::new_hset("table", "key", 10);
         dispatch(cmd, &store);
 
         let cmd = CommandRequest::new_hdel("table", "key");
@@ -159,7 +159,7 @@ mod tests {
         assert_res_ok(res, &[false.into()], &[]);
 
         // 存在的 key 返回 true
-        let cmd = CommandRequest::new_hset("table", "key", 10.into());
+        let cmd = CommandRequest::new_hset("table", "key", 10);
         dispatch(cmd, &store);
         let cmd = CommandRequest::new_hexist("table", "key");
         let res = dispatch(cmd, &store);
@@ -178,10 +178,10 @@ mod tests {
     fn hgetall_should_work() {
         let store = MemTable::new();
         let cmds = vec![
-            CommandRequest::new_hset("score", "u1", 10.into()),
-            CommandRequest::new_hset("score", "u2", 9.into()),
-            CommandRequest::new_hset("score", "u3", 23.into()),
-            CommandRequest::new_hset("score", "u1", 5.into()),
+            CommandRequest::new_hset("score", "u1", 10),
+            CommandRequest::new_hset("score", "u2", 9),
+            CommandRequest::new_hset("score", "u3", 23),
+            CommandRequest::new_hset("score", "u1", 5),
         ];
         for cmd in cmds {
             dispatch(cmd, &store);
@@ -190,9 +190,9 @@ mod tests {
         let cmd = CommandRequest::new_hgetall("score");
         let res = dispatch(cmd, &store);
         let pairs = &[
-            Kvpair::new("u1", 5.into()),
-            Kvpair::new("u2", 9.into()),
-            Kvpair::new("u3", 23.into()),
+            Kvpair::new("u1", 5),
+            Kvpair::new("u2", 9),
+            Kvpair::new("u3", 23),
         ];
         assert_res_ok(res, &[], pairs);
     }
@@ -205,10 +205,10 @@ mod tests {
         let cmd = CommandRequest::new_hmset(
             "table",
             vec![
-                Kvpair::new("key1", 1.into()),
-                Kvpair::new("key2", 2.into()),
-                Kvpair::new("key3", 3.into()),
-                Kvpair::new("key4", 4.into()),
+                Kvpair::new("key1", 1),
+                Kvpair::new("key2", 2),
+                Kvpair::new("key3", 3),
+                Kvpair::new("key4", 4),
             ],
         );
         dispatch(cmd, &store);

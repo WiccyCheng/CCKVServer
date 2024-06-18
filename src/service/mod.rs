@@ -151,7 +151,7 @@ mod tests {
 
         // 创建一个线程，在 table 中写入 key, value
         let handle = thread::spawn(move || {
-            let res = cloned.execute(CommandRequest::new_hset("table", "key", "value".into()));
+            let res = cloned.execute(CommandRequest::new_hset("table", "key", "value"));
             assert_res_ok(res, &[Value::default()], &[]);
         });
         handle.join().unwrap();
@@ -187,7 +187,7 @@ mod tests {
             .fn_after_send(e)
             .into();
 
-        let res = service.execute(CommandRequest::new_hset("table", "key", "value".into()));
+        let res = service.execute(CommandRequest::new_hset("table", "key", "value"));
         assert_eq!(res.status, StatusCode::CREATED.as_u16() as _);
         assert_eq!(res.message, "");
         assert_eq!(res.values, vec![Value::default()]);

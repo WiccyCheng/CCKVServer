@@ -28,7 +28,11 @@ impl CommandRequest {
     }
 
     /// 创建 HSET 命令
-    pub fn new_hset(table: impl Into<String>, key: impl Into<String>, value: Value) -> Self {
+    pub fn new_hset(
+        table: impl Into<String>,
+        key: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Self {
         Self {
             request_data: Some(RequestData::Hset(Hset {
                 table: table.into(),
@@ -99,10 +103,10 @@ impl CommandRequest {
 
 impl Kvpair {
     // 创建一个新的 kv pair
-    pub fn new(key: impl Into<String>, value: Value) -> Self {
+    pub fn new(key: impl Into<String>, value: impl Into<Value>) -> Self {
         Self {
             key: key.into(),
-            value: Some(value),
+            value: Some(value.into()),
         }
     }
 }

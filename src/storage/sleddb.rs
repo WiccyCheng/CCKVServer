@@ -65,7 +65,7 @@ impl Storage for SledDb {
 impl From<Result<(IVec, IVec), sled::Error>> for Kvpair {
     fn from(v: Result<(IVec, IVec), sled::Error>) -> Self {
         match v {
-            Ok((k, v)) => match v.as_ref().try_into() {
+            Ok((k, v)) => match TryInto::<Value>::try_into(v.as_ref()) {
                 Ok(v) => Kvpair::new(ivec_to_key(k.as_ref()), v),
                 Err(_) => Kvpair::default(),
             },

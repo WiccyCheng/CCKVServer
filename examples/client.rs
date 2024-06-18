@@ -17,8 +17,8 @@ async fn main() -> Result<()> {
         AsyncProstStream::<_, CommandResponse, CommandRequest, _>::from(stream).for_async();
 
     let cmds = vec![
-        CommandRequest::new_hset("table", "hello", "world".into()),
-        CommandRequest::new_hset("table", "hello", "a whole new world".into()),
+        CommandRequest::new_hset("table", "hello", "world"),
+        CommandRequest::new_hset("table", "hello", "a whole new world"),
         CommandRequest::new_hget("table", "hello"),
     ];
 

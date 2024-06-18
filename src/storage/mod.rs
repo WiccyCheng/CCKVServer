@@ -97,10 +97,10 @@ mod tests {
 
     fn test_basi_interface(store: impl Storage) {
         // 第一次set会创建table，插入key并返回None（之前没值）
-        let v = store.set("table", "key".to_string(), "value");
+        let v = store.set("table", "key", "value");
         assert!(v.unwrap().is_none());
         // 再次set会同样的key会更新，并返回之前的值
-        let v1 = store.set("table", "key".to_string(), "value1");
+        let v1 = store.set("table", "key", "value1");
         assert_eq!(v1, Ok(Some("value".into())));
 
         //get存在的key会得到最新的值
@@ -126,30 +126,24 @@ mod tests {
     }
 
     fn test_get_all(store: impl Storage) {
-        store.set("table", "key1".to_string(), "1").unwrap();
-        store.set("table", "key2".to_string(), "2").unwrap();
+        store.set("table", "key1", "1").unwrap();
+        store.set("table", "key2", "2").unwrap();
         let mut data = store.get_all("table").unwrap();
         data.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(
             data,
-            vec![
-                Kvpair::new("key1", "1".into()),
-                Kvpair::new("key2", "2".into())
-            ]
+            vec![Kvpair::new("key1", "1"), Kvpair::new("key2", "2")]
         );
     }
 
     fn test_get_iter(store: impl Storage) {
-        store.set("table", "key1".to_string(), "1").unwrap();
-        store.set("table", "key2".to_string(), "2").unwrap();
+        store.set("table", "key1", "1").unwrap();
+        store.set("table", "key2", "2").unwrap();
         let mut data: Vec<_> = store.get_iter("table").unwrap().collect();
         data.sort_by(|a, b| a.partial_cmp(b).unwrap());
         assert_eq!(
             data,
-            vec![
-                Kvpair::new("key1", "1".into()),
-                Kvpair::new("key2", "2".into())
-            ]
+            vec![Kvpair::new("key1", "1"), Kvpair::new("key2", "2")]
         );
     }
 }
