@@ -207,11 +207,3 @@ fn assert_res_ok(mut res: CommandResponse, values: &[Value], pairs: &[Kvpair]) {
     assert_eq!(res.pairs, pairs);
 }
 
-// 测试失败的返回结果
-#[cfg(test)]
-fn assert_res_error(res: CommandResponse, code: u32, msg: &str) {
-    assert_eq!(res.status, code);
-    assert!(res.message.contains(msg));
-    assert_eq!(res.values, &[]);
-    assert_eq!(res.pairs, &[]);
-}

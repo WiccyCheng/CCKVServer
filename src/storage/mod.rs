@@ -1,7 +1,9 @@
 mod memory;
+mod rocksdb;
 mod sleddb;
 
 pub use memory::MemTable;
+pub use rocksdb::RocksDB;
 pub use sleddb::SledDb;
 
 use crate::{KvError, Kvpair, Value};
@@ -92,6 +94,27 @@ mod tests {
     fn selddb_get_all_should_work() {
         let dir = tempdir().unwrap();
         let store = SledDb::new(dir);
+        test_get_all(store);
+    }
+
+    #[test]
+    fn rocksdb_basic_interface_should_work() {
+        let dir = tempdir().unwrap();
+        let store = RocksDB::new(dir);
+        test_basi_interface(store);
+    }
+
+    #[test]
+    fn rocksdb_iter_should_work() {
+        let dir = tempdir().unwrap();
+        let store = RocksDB::new(dir);
+        test_get_iter(store);
+    }
+
+    #[test]
+    fn rocksdb_get_all_should_work() {
+        let dir = tempdir().unwrap();
+        let store = RocksDB::new(dir);
         test_get_all(store);
     }
 

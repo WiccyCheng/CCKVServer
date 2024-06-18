@@ -269,3 +269,12 @@ impl TryFrom<&[u8]> for Value {
         Ok(msg)
     }
 }
+
+impl From<(Box<[u8]>, Box<[u8]>)> for Kvpair {
+    fn from(pair: (Box<[u8]>, Box<[u8]>)) -> Self {
+        Kvpair::new(
+            std::str::from_utf8(pair.0.as_ref()).unwrap(),
+            TryInto::<Value>::try_into(pair.1.as_ref()).unwrap(),
+        )
+    }
+}
