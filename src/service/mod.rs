@@ -206,4 +206,3 @@ fn assert_res_ok(mut res: CommandResponse, values: &[Value], pairs: &[Kvpair]) {
     assert_eq!(res.values, values);
     assert_eq!(res.pairs, pairs);
 }
-

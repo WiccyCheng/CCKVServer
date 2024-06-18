@@ -198,20 +198,17 @@ mod tests {
     }
 
     #[test]
-    //TODO(Wiccy): split each mfun so that the test result can be more readable
-    fn hmfun_should_work() {
+    fn hmget_should_work() {
         let store = MemTable::new();
-
-        let cmd = CommandRequest::new_hmset(
-            "table",
-            vec![
-                Kvpair::new("key1", 1),
-                Kvpair::new("key2", 2),
-                Kvpair::new("key3", 3),
-                Kvpair::new("key4", 4),
-            ],
-        );
-        dispatch(cmd, &store);
+        let cmds = vec![
+            CommandRequest::new_hset("table", "key1", 1),
+            CommandRequest::new_hset("table", "key2", 2),
+            CommandRequest::new_hset("table", "key3", 3),
+            CommandRequest::new_hset("table", "key4", 4),
+        ];
+        for cmd in cmds {
+            dispatch(cmd, &store);
+        }
 
         let cmd = CommandRequest::new_hmget(
             "table",
@@ -229,16 +226,60 @@ mod tests {
             ],
             &[],
         );
+    }
+
+    #[test]
+    fn hmset_should_work() {
+        let store = MemTable::new();
+        let pairs = &[
+            Kvpair::new("key1", 1),
+            Kvpair::new("key2", 2),
+            Kvpair::new("key3", 3),
+            Kvpair::new("key4", 4),
+        ];
+
+        let cmd = CommandRequest::new_hmset("table", pairs.into());
+        dispatch(cmd, &store);
+
+        let cmd = CommandRequest::new_hgetall("table");
+        let res = dispatch(cmd, &store);
+        assert_res_ok(res, &[], pairs);
+    }
+
+    #[test]
+    fn hmdel_should_work() {
+        let store = MemTable::new();
+        let cmds = vec![
+            CommandRequest::new_hset("table", "key1", 1),
+            CommandRequest::new_hset("table", "key2", 2),
+            CommandRequest::new_hset("table", "key3", 3),
+            CommandRequest::new_hset("table", "key4", 4),
+        ];
+        for cmd in cmds {
+            dispatch(cmd, &store);
+        }
 
         let cmd = CommandRequest::new_hmdel("table", vec!["key1", "key2", "key3", "key4"]);
         let res = dispatch(cmd, &store);
         assert_res_ok(res, &[1.into(), 2.into(), 3.into(), 4.into()], &[]);
+    }
+
+    #[test]
+    fn hmexist_should_work() {
+        let store = MemTable::new();
+        let cmds = vec![
+            CommandRequest::new_hset("table", "key1", 1),
+            CommandRequest::new_hset("table", "key3", 3),
+        ];
+        for cmd in cmds {
+            dispatch(cmd, &store);
+        }
 
         let cmd = CommandRequest::new_hmexist("table", vec!["key1", "key2", "key3", "key4"]);
         let res = dispatch(cmd, &store);
         assert_res_ok(
             res,
-            &[false.into(), false.into(), false.into(), false.into()],
+            &[true.into(), false.into(), true.into(), false.into()],
             &[],
         );
     }
