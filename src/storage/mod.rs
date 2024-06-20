@@ -124,28 +124,28 @@ mod tests {
         assert!(v.unwrap().is_none());
         // 再次set会同样的key会更新，并返回之前的值
         let v1 = store.set("table", "key", "value1");
-        assert_eq!(v1, Ok(Some("value".into())));
+        assert_eq!(v1.unwrap(), Some("value".into()));
 
         //get存在的key会得到最新的值
         let v = store.get("table", "key");
-        assert_eq!(v, Ok(Some("value1".into())));
+        assert_eq!(v.unwrap(), Some("value1".into()));
 
         //get 不存在的key或者table会返回None
-        assert_eq!(Ok(None), store.get("table", "not exist key"));
+        assert_eq!(None, store.get("table", "not exist key").unwrap());
         assert!(store.get("not exist table", "key").unwrap().is_none());
 
         //contains 存在的key返回true，否则返回None
-        assert_eq!(Ok(true), store.contains("table", "key"));
-        assert_eq!(Ok(false), store.contains("table", "not exist key"));
-        assert_eq!(Ok(false), store.contains("not exist table", "key"));
+        assert_eq!(true, store.contains("table", "key").unwrap());
+        assert_eq!(false, store.contains("table", "not exist key").unwrap());
+        assert_eq!(false, store.contains("not exist table", "key").unwrap());
 
         // del 存在的key返回之前的值
         let v = store.del("table", "key");
-        assert_eq!(v, Ok(Some("value1".into())));
+        assert_eq!(v.unwrap(), Some("value1".into()));
 
         // del 不存在的 key 或者table返回None
-        assert_eq!(Ok(None), store.del("table", "not exist key"));
-        assert_eq!(Ok(None), store.del("not exist table", "key"));
+        assert_eq!(None, store.del("table", "not exist key").unwrap());
+        assert_eq!(None, store.del("not exist table", "key").unwrap());
     }
 
     fn test_get_all(store: impl Storage) {
