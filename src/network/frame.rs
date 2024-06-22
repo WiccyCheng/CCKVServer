@@ -1,31 +1,38 @@
-use std::io::{Read, Write};
-
 use bytes::{Buf, BufMut, BytesMut};
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use prost::Message;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::debug;
 
-use crate::{CommandRequest, CommandResponse, KvError};
+use crate::{compress, decompress, CommandRequest, CommandResponse, CompressorType, KvError};
 
 /// Frame头的长度占 4 个字节
 const LEN_LEN: usize = 4;
-/// 长度占31 bit，所以最大的 Frame 是2G
-const MAX_FRAME: usize = 2 * 1024 * 1024 * 1024;
+/// 长度占30 bit，所以最大的 Frame 是 1G
+const MAX_FRAME: usize = 1024 * 1024 * 1024;
 /// 如果 payload 长度超过 1436 字节，就做压缩。
 /// 以太网的 MTU 是 1500 字节，IP头、TCP头各占20字节，再除去IP头和TCP头可能包含的一些Option，我们预留 20 字节
 /// 还剩 1440 字节，再减去预留的 4 字节做帧长度。超过 1436 字节可能会导致分片，所以我们做压缩处理
 const COMPRESSION_LIMIT: usize = 1436;
-/// 代表压缩的 bit （整个长度为4字节的最高位）
-const COMPRESSION_BIT: usize = 1 << 31;
+/// 代表压缩的 bit 的位置整个长度为4字节的最高位）
+const COMPRESSION_BIT: usize = 30;
+/// 用于消除最高2位的掩码
+const COMPRESSION_MASK: usize = 0x3FFFFFFF;
 
 // 处理 Frame 的 encode/decode
 pub trait FrameCoder
 where
     Self: Message + Sized + Default,
 {
-    // 把一个 Message encode 成一个 Frame
     fn encode_frame(&self, buf: &mut BytesMut) -> Result<(), KvError> {
+        self.encode_frame_with_compressor(buf, CompressorType::GZIP)
+    }
+
+    // 把一个 Message encode 成一个 Frame
+    fn encode_frame_with_compressor(
+        &self,
+        buf: &mut BytesMut,
+        compressor_type: CompressorType,
+    ) -> Result<(), KvError> {
         let size = self.encoded_len();
 
         if size >= MAX_FRAME {
@@ -40,19 +47,15 @@ where
             self.encode(&mut buf_tmp)?;
 
             // 为了 Frame 头部拿走 4 个字节
-            let payload = buf.split_off(LEN_LEN);
+            let mut payload = buf.split_off(LEN_LEN);
             buf.clear();
 
-            // gzip 压缩
-            let mut encoder = GzEncoder::new(payload.writer(), Compression::default());
-            encoder.write_all(&buf_tmp[..])?;
-
-            // 压缩完成后，再从 gzip encoder 把 BytesMut 中拿回来
-            let payload = encoder.finish()?.into_inner();
+            // 压缩
+            compress(compressor_type, &buf_tmp[..], &mut payload)?;
             debug!("Encode a frame size: {size}({})", payload.len());
 
             // 写入压缩后的长度，同时把最高位置 1 表示该组数据经过压缩
-            buf.put_u32((payload.len() | COMPRESSION_BIT) as _);
+            buf.put_u32((payload.len() | ((compressor_type as usize) << COMPRESSION_BIT)) as _);
 
             // 合并 BytesMut
             buf.unsplit(payload);
@@ -68,14 +71,13 @@ where
     fn decode_frame(buf: &mut BytesMut) -> Result<Self, KvError> {
         // 先取 4 字节，从中获得长度和 compression bit
         let header = buf.get_u32() as usize;
-        let (len, compressed) = decode_header(header);
-        debug!("Got a frame: msg len: {len}, compressed: {compressed}");
+        let (len, compress_type) = decode_header(header);
+        debug!("Got a frame: msg len: {len}, compress_type: {compress_type:?}");
 
-        if compressed {
+        if compress_type != CompressorType::None {
             // 解压缩
-            let mut decoder = GzDecoder::new(&buf[..len]);
             let mut buf_tmp = Vec::with_capacity(len * 2);
-            decoder.read_to_end(&mut buf_tmp)?;
+            decompress(compress_type, &buf[..len], &mut buf_tmp)?;
             buf.advance(len);
 
             Ok(Self::decode(&buf_tmp[..buf_tmp.len()])?)
@@ -90,10 +92,10 @@ where
 impl FrameCoder for CommandRequest {}
 impl FrameCoder for CommandResponse {}
 
-fn decode_header(header: usize) -> (usize, bool) {
-    let len = header & !COMPRESSION_BIT;
-    let compressed = header & COMPRESSION_BIT == COMPRESSION_BIT;
-    (len, compressed)
+fn decode_header(header: usize) -> (usize, CompressorType) {
+    let len = header & COMPRESSION_MASK;
+    let compress_type: CompressorType = ((header & !COMPRESSION_MASK) >> COMPRESSION_BIT).into();
+    (len, compress_type)
 }
 
 /// 从 stream 中读取一个完整的 frame
@@ -163,7 +165,8 @@ mod tests {
         let mut buf = BytesMut::new();
 
         let cmd = CommandRequest::new_hdel("table", "key");
-        cmd.encode_frame(&mut buf).unwrap();
+        cmd.encode_frame_with_compressor(&mut buf, CompressorType::LZ4)
+            .unwrap();
 
         // 最高位未设置压缩标志
         assert_eq!(is_compressed(&buf), false);
@@ -178,7 +181,8 @@ mod tests {
 
         let values: Vec<Value> = vec![1.into(), "hello".into(), b"data".into()];
         let res: CommandResponse = values.into();
-        res.encode_frame(&mut buf).unwrap();
+        res.encode_frame_with_compressor(&mut buf, CompressorType::ZSTD)
+            .unwrap();
 
         // 最高位未设置压缩标志
         assert_eq!(is_compressed(&buf), false);
@@ -193,7 +197,8 @@ mod tests {
 
         let value: Value = Bytes::from(vec![0u8; COMPRESSION_LIMIT + 1]).into();
         let res: CommandResponse = value.into();
-        res.encode_frame(&mut buf).unwrap();
+        res.encode_frame_with_compressor(&mut buf, CompressorType::GZIP)
+            .unwrap();
 
         assert_eq!(is_compressed(&buf), true);
 
@@ -203,7 +208,7 @@ mod tests {
 
     fn is_compressed(data: &[u8]) -> bool {
         if let &[v] = &data[..1] {
-            v >> 7 == 1
+            v >> 6 != 0b00
         } else {
             false
         }

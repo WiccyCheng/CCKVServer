@@ -1,5 +1,8 @@
+mod compressor;
 mod frame;
+
 use bytes::BytesMut;
+pub use compressor::*;
 use frame::read_frame;
 pub use frame::FrameCoder;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};

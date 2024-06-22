@@ -21,6 +21,8 @@ thiserror = "1"                                                  # 错误定义�
 tracing = "0.1"                                                  # 日志处理
 sled = "0.34"                                                    # sled db
 flate2 = "1"                                                     # gzip压缩
+lz4 = "1"                                                        # lz4压缩
+zstd = "0.13"                                                    # zstd压缩
 tokio = { version = "1", features = ["full"] }                   # 异步网络库
 rocksdb = { version = "0.22", features = ["multi-threaded-cf"] }
 tracing-subscriber = "0.3"                                       # 日志处理
