@@ -9,7 +9,7 @@ path = "src/server.rs"
 
 [[bin]]
 name = "kvc"
-path = "src/client.rs"
+path = "src/client_cli.rs"
 
 [dependencies]
 anyhow = "1"                                                     # 错误处理
@@ -26,6 +26,7 @@ zstd = "0.13"                                                    # zstd压缩
 tokio = { version = "1", features = ["full"] }                   # 异步网络库
 rocksdb = { version = "0.22", features = ["multi-threaded-cf"] }
 tracing-subscriber = "0.3"                                       # 日志处理
+rustyline = "14.0.0"                                             # 命令行解析和处理
 
 [dev-dependencies]
 futures = "0.3"                                        # 提供 Stream trait

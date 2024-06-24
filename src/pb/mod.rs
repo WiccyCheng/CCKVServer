@@ -4,6 +4,7 @@ use abi::{command_request::RequestData, *};
 use bytes::Bytes;
 use http::StatusCode;
 use prost::Message;
+use std::fmt::Display;
 
 use crate::KvError;
 
@@ -290,5 +291,55 @@ impl From<Bytes> for Value {
         Self {
             value: Some(value::Value::Binary(buf)),
         }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.value {
+            Some(value) => write!(f, "{:?}", value),
+            None => Ok({}),
+        }
+    }
+}
+
+impl Display for Kvpair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.value.is_some() {
+            return write!(
+                f,
+                "key: {}, value: {}",
+                self.key,
+                self.value.as_ref().unwrap(),
+            );
+        } else {
+            return write!(f, "key: {}, value: None", self.key,);
+        }
+    }
+}
+
+impl Display for CommandResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Status: {}\n", self.status)?;
+
+        if !self.message.is_empty() {
+            writeln!(f, "Message: {}", self.message)?;
+        }
+
+        if !self.values.is_empty() {
+            writeln!(f, "Values:")?;
+            for value in &self.values {
+                writeln!(f, "  {}", value)?;
+            }
+        }
+
+        if !self.pairs.is_empty() {
+            writeln!(f, "Pairs:")?;
+            for pair in &self.pairs {
+                writeln!(f, "  {}", pair)?;
+            }
+        }
+
+        Ok(())
     }
 }

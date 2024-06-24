@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum KvError {
-    #[error("Not found fot table: {0}, key{1}")]
+    #[error("Not found for table: {0}, key: {1}")]
     NotFound(String, String),
     #[error("Frame is larger than max size")]
     FrameError,
