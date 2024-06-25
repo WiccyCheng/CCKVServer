@@ -9,12 +9,16 @@ path = "src/server.rs"
 
 [[bin]]
 name = "kvc"
+path = "src/client.rs"
+
+[[bin]]
+name = "kvc_cli"
 path = "src/client_cli.rs"
 
 [dependencies]
 anyhow = "1"                                                     # 错误处理
 bytes = "1"                                                      # 高效处理网络 buffer 的库
-dashmap = "5.5.3"                                                # 并发 HashMap
+dashmap = "6.0.1"                                                # 并发 HashMap
 http = "1.1.0"                                                   # 我们使用 HTTP status code 所以引入这个类型库
 prost = "0.12.6"                                                 # 处理 protobuf 的代码
 thiserror = "1"                                                  # 错误定义和处理
@@ -24,14 +28,18 @@ flate2 = "1"                                                     # gzip压缩
 lz4 = "1"                                                        # lz4压缩
 zstd = "0.13"                                                    # zstd压缩
 tokio = { version = "1", features = ["full"] }                   # 异步网络库
-rocksdb = { version = "0.22", features = ["multi-threaded-cf"] }
+rocksdb = { version = "0.22", features = ["multi-threaded-cf"] } # rock db
 tracing-subscriber = "0.3"                                       # 日志处理
 rustyline = "14.0.0"                                             # 命令行解析和处理
+tokio-rustls = "0.26.0"                                          # tls库
+rustls-native-certs = "0.7"                                      #获取本地证书
+rustls-pemfile = "2.1.2"
 
 [dev-dependencies]
 futures = "0.3"                                        # 提供 Stream trait
 tokio-util = { version = "0.7", features = ["codec"] }
 tempfile = "3"
+certify = "0.5.2"
 
 [build-dependencies]
 prost-build = "0.12.6" # 编译 protobuf

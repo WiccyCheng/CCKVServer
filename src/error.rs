@@ -18,6 +18,8 @@ pub enum KvError {
         key: String,
         error: String,
     },
+    #[error("Certificate parse error: error to load {0} {1}")]
+    CertifcateParseError(&'static str, &'static str),
 
     #[error("Failed to encode protobuf message")]
     EncodeError(#[from] prost::EncodeError),
@@ -29,6 +31,8 @@ pub enum KvError {
     RocksDBError(#[from] rocksdb::Error),
     #[error("I/O error")]
     IoError(#[from] std::io::Error),
+    #[error("cert error")]
+    TlsError(#[from] tokio_rustls::rustls::Error),
 
     #[error("Internal error: {0}")]
     Internal(String),

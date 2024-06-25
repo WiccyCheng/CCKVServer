@@ -1,5 +1,5 @@
 use anyhow::Result;
-use kv::{CommandRequest, ProstClientStream};
+use kv::{CommandRequest, ProstClientStream, TlsClientConnector};
 use tokio::net::TcpStream;
 use tracing::info;
 
@@ -9,7 +9,17 @@ async fn main() -> Result<()> {
 
     let addr = "127.0.0.1:9527";
 
+    let ca_cert = Some(include_str!("../fixtures/ca.cert"));
+    let client_identity = Some((
+        include_str!("../fixtures/client.cert"),
+        include_str!("../fixtures/client.key"),
+    ));
+
+    let connector = TlsClientConnector::new("kvserver.acme.inc", client_identity, ca_cert)?;
+
     let stream = TcpStream::connect(addr).await?;
+
+    let stream = connector.connect(stream).await?;
 
     let mut client = ProstClientStream::new(stream);
 
