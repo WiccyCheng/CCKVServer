@@ -31,8 +31,10 @@ pub enum KvError {
     RocksDBError(#[from] rocksdb::Error),
     #[error("I/O error")]
     IoError(#[from] std::io::Error),
-    #[error("cert error")]
+    #[error("tls error")]
     TlsError(#[from] tokio_rustls::rustls::Error),
+    #[error("noise error")]
+    NoiseError(#[from] snow::Error),
 
     #[error("Internal error: {0}")]
     Internal(String),

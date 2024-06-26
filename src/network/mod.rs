@@ -1,12 +1,15 @@
 mod compressor;
 mod frame;
+mod noise;
 mod tls;
 
-use bytes::BytesMut;
 pub use compressor::*;
-use frame::read_frame;
 pub use frame::FrameCoder;
+pub use noise::*;
 pub use tls::*;
+
+use bytes::BytesMut;
+use frame::read_frame;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::info;
 
