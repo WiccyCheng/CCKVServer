@@ -120,31 +120,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::DummyStream;
     use crate::Value;
     use bytes::Bytes;
-
-    struct DummyStream {
-        buf: BytesMut,
-    }
-
-    impl AsyncRead for DummyStream {
-        fn poll_read(
-            self: std::pin::Pin<&mut Self>,
-            _cx: &mut std::task::Context<'_>,
-            buf: &mut tokio::io::ReadBuf<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
-            // 看看 Reader 需要多大的数据
-            let len = buf.capacity();
-
-            // split 出这么大的数据
-            let data = self.get_mut().buf.split_to(len);
-
-            // 拷贝给 ReadBuf
-            buf.put_slice(&data);
-
-            std::task::Poll::Ready(Ok(()))
-        }
-    }
 
     #[tokio::test]
     async fn read_frame_should_work() {
