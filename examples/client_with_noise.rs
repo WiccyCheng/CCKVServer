@@ -1,5 +1,5 @@
 use anyhow::Result;
-use kv::{CommandRequest, NoiseInitiator, ProstClientStream};
+use kv::{ClientSecurityStream, CommandRequest, NoiseInitiator, ProstClientStream};
 use tokio::net::TcpStream;
 use tracing::info;
 
@@ -11,7 +11,7 @@ async fn main() -> Result<()> {
 
     let stream = TcpStream::connect(addr).await?;
 
-    let stream = NoiseInitiator::connect(stream).await?;
+    let stream = NoiseInitiator::connect(&NoiseInitiator::new(), stream).await?;
 
     let mut client = ProstClientStream::new(stream);
 

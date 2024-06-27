@@ -1,5 +1,5 @@
 use anyhow::Result;
-use kv::{CommandRequest, ProstClientStream, TlsClientConnector};
+use kv::{ClientSecurityStream, CommandRequest, ProstClientStream, TlsClientConnector};
 use tokio::net::TcpStream;
 use tracing::info;
 

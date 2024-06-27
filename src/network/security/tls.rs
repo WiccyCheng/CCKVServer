@@ -5,7 +5,7 @@ use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::{client::TlsStream as ClientTlsStream, server::TlsStream as ServerTlsStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
-use crate::KvError;
+use crate::{ClientSecurityStream, KvError, ServerSecurityStream};
 use std::io::Cursor;
 use std::sync::Arc;
 
@@ -24,6 +24,8 @@ pub struct TlsClientConnector {
     pub config: Arc<ClientConfig>,
     pub domain: Arc<String>,
 }
+
+pub struct TlsStream;
 
 impl TlsClientConnector {
     /// 加载 client cert / CA cert，生成 ClientConfig
@@ -70,21 +72,6 @@ impl TlsClientConnector {
             domain: Arc::new(domain.into()),
         })
     }
-
-    /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
-    pub async fn connect<S>(&self, stream: S) -> Result<ClientTlsStream<S>, KvError>
-    where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
-    {
-        let dns = ServerName::try_from(self.domain.as_str())
-            .map_err(|_| KvError::Internal("Invalid DNS name".to_string()))?;
-
-        let stream = TlsConnector::from(self.config.clone())
-            .connect(dns.to_owned(), stream)
-            .await?;
-
-        Ok(stream)
-    }
 }
 
 impl TlsServerAcceptor {
@@ -122,8 +109,31 @@ impl TlsServerAcceptor {
             inner: Arc::new(config),
         })
     }
+}
 
-    pub async fn accept<S>(&self, stream: S) -> Result<ServerTlsStream<S>, KvError>
+impl ClientSecurityStream for TlsClientConnector {
+    type Stream<S> = ClientTlsStream<S>;
+
+    /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
+    async fn connect<S>(&self, stream: S) -> Result<Self::Stream<S>, KvError>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send,
+    {
+        let dns = ServerName::try_from(self.domain.as_str())
+            .map_err(|_| KvError::Internal("Invalid DNS name".to_string()))?;
+
+        let stream = TlsConnector::from(self.config.clone())
+            .connect(dns.to_owned(), stream)
+            .await?;
+
+        Ok(stream)
+    }
+}
+
+impl ServerSecurityStream for TlsServerAcceptor {
+    type Stream<S> = ServerTlsStream<S>;
+
+    async fn accept<S>(&self, stream: S) -> Result<Self::Stream<S>, KvError>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
     {
@@ -179,11 +189,11 @@ mod tests {
         net::{TcpListener, TcpStream},
     };
 
-    const CA_CERT: &str = include_str!("../../fixtures/ca.cert");
-    const CLIENT_CERT: &str = include_str!("../../fixtures/client.cert");
-    const CLIENT_KEY: &str = include_str!("../../fixtures/client.key");
-    const SERVER_CERT: &str = include_str!("../../fixtures/server.cert");
-    const SERVER_KEY: &str = include_str!("../../fixtures/server.key");
+    const CA_CERT: &str = include_str!("../../../fixtures/ca.cert");
+    const CLIENT_CERT: &str = include_str!("../../../fixtures/client.cert");
+    const CLIENT_KEY: &str = include_str!("../../../fixtures/client.key");
+    const SERVER_CERT: &str = include_str!("../../../fixtures/server.cert");
+    const SERVER_KEY: &str = include_str!("../../../fixtures/server.key");
 
     #[tokio::test]
     async fn tls_should_work() -> Result<()> {
