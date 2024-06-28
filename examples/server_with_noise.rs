@@ -1,7 +1,5 @@
 use anyhow::Result;
-use kv::{
-    MemTable, NoiseResponder, ProstServerStream, ServerSecurityStream, Service, ServiceInner,
-};
+use kv::{MemTable, NoiseResponder, ProstServerStream, Service, ServiceInner};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -16,7 +14,7 @@ async fn main() -> Result<()> {
     loop {
         let (stream, addr) = listener.accept().await?;
         info!("Client {addr:?} connected");
-        let stream = NoiseResponder::accept(&NoiseResponder::new(), stream).await?;
+        let stream = NoiseResponder::accept(stream).await?;
         let stream = ProstServerStream::new(stream, service.clone());
         tokio::spawn(async move { stream.process().await });
     }

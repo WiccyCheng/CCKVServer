@@ -83,8 +83,8 @@ mod tests {
         assert_res_ok,
         tls_utils::{tls_acceptor, tls_connector},
         utils::DummyStream,
-        ClientSecurityStream, CommandRequest, KvError, MemTable, ProstClientStream,
-        ProstServerStream, ServerSecurityStream, Service, ServiceInner, Storage, TlsServerAcceptor,
+        CommandRequest, KvError, MemTable, ProstClientStream, ProstServerStream, Service,
+        ServiceInner, Storage, TlsServerAcceptor,
     };
     use anyhow::Result;
     use std::net::SocketAddr;

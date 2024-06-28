@@ -3,46 +3,30 @@ use snow::{Builder, TransportState};
 use std::{io::ErrorKind, pin::Pin, task::Poll};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
-use crate::{ClientSecurityStream, KvError, ServerSecurityStream};
+use crate::KvError;
 
 // TODO(Wiccy): Support multi pattern
 static PATTERN: &'static str = "Noise_NN_25519_ChaChaPoly_BLAKE2s";
 
-// 目前仅支持 Noise 下的 NN 方式，因此还不需要存储数据
-pub struct NoiseInitiator;
-pub struct NoiseResponder;
-
-impl NoiseInitiator {
-    pub fn new() -> Self {
-        Self
-    }
-}
-impl NoiseResponder {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-pub struct ClientNoiseStream<S> {
+// 目前仅支持 Noise 下的 NN 方式
+pub struct NoiseInitiator<S> {
     stream: S,
     initiator: TransportState,
     read_buf: Vec<u8>,
     write_buf: Vec<u8>,
 }
-pub struct ServerNoiseStream<S> {
+pub struct NoiseResponder<S> {
     stream: S,
     responder: TransportState,
     read_buf: Vec<u8>,
     write_buf: Vec<u8>,
 }
 
-impl ClientSecurityStream for NoiseInitiator {
-    type Stream<S> = ClientNoiseStream<S>;
-
-    async fn connect<S>(&self, mut stream: S) -> Result<Self::Stream<S>, KvError>
-    where
-        S: AsyncRead + AsyncWrite + Send + Unpin,
-    {
+impl<S> NoiseInitiator<S>
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin,
+{
+    pub async fn connect(mut stream: S) -> Result<Self, KvError> {
         let mut initiator = Builder::new(PATTERN.parse()?).build_initiator()?;
 
         // Noise handshake
@@ -53,7 +37,7 @@ impl ClientSecurityStream for NoiseInitiator {
         let mut read_buf = [0u8; 65535];
         initiator.read_message(&first_msg[..len], &mut read_buf)?;
 
-        Ok(ClientNoiseStream {
+        Ok(Self {
             stream,
             initiator: initiator.into_transport_mode()?,
             read_buf: Vec::new(),
@@ -62,13 +46,11 @@ impl ClientSecurityStream for NoiseInitiator {
     }
 }
 
-impl ServerSecurityStream for NoiseResponder {
-    type Stream<S> = ServerNoiseStream<S>;
-
-    async fn accept<S>(&self, mut stream: S) -> Result<Self::Stream<S>, KvError>
-    where
-        S: AsyncRead + AsyncWrite + Send + Unpin,
-    {
+impl<S> NoiseResponder<S>
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin,
+{
+    pub async fn accept(mut stream: S) -> Result<Self, KvError> {
         let mut responder = Builder::new(PATTERN.parse()?).build_responder()?;
 
         // Noise handshake
@@ -79,7 +61,7 @@ impl ServerSecurityStream for NoiseResponder {
         let len = responder.write_message(&[], &mut first_msg)?;
         stream.write_all(&first_msg[..len]).await?;
 
-        Ok(ServerNoiseStream {
+        Ok(Self {
             stream,
             responder: responder.into_transport_mode()?,
             read_buf: Vec::new(),
@@ -88,7 +70,7 @@ impl ServerSecurityStream for NoiseResponder {
     }
 }
 
-impl<S: Unpin + AsyncRead> AsyncRead for ClientNoiseStream<S> {
+impl<S: Unpin + AsyncRead> AsyncRead for NoiseInitiator<S> {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -118,7 +100,7 @@ impl<S: Unpin + AsyncRead> AsyncRead for ClientNoiseStream<S> {
     }
 }
 
-impl<S: Unpin + AsyncWrite> AsyncWrite for ClientNoiseStream<S> {
+impl<S: Unpin + AsyncWrite> AsyncWrite for NoiseInitiator<S> {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -171,7 +153,7 @@ impl<S: Unpin + AsyncWrite> AsyncWrite for ClientNoiseStream<S> {
     }
 }
 
-impl<S: Unpin + AsyncRead> AsyncRead for ServerNoiseStream<S> {
+impl<S: Unpin + AsyncRead> AsyncRead for NoiseResponder<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -207,7 +189,7 @@ impl<S: Unpin + AsyncRead> AsyncRead for ServerNoiseStream<S> {
     }
 }
 
-impl<S: Unpin + AsyncWrite> AsyncWrite for ServerNoiseStream<S> {
+impl<S: Unpin + AsyncWrite> AsyncWrite for NoiseResponder<S> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -269,7 +251,7 @@ mod tests {
         let addr = start_server().await?;
 
         let stream = TcpStream::connect(addr).await?;
-        let mut stream = NoiseInitiator::connect(&NoiseInitiator::new(), stream).await?;
+        let mut stream = NoiseInitiator::connect(stream).await?;
         stream.write_all(b"hello world!").await?;
         let mut buf = [0; 12];
         stream.read_exact(&mut buf).await?;
@@ -284,7 +266,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (stream, _) = echo.accept().await.unwrap();
-            if let Ok(mut stream) = NoiseResponder::accept(&NoiseResponder::new(), stream).await {
+            if let Ok(mut stream) = NoiseResponder::accept(stream).await {
                 let mut buf = [0; 12];
                 stream.read_exact(&mut buf).await.unwrap();
                 stream.write_all(&buf).await.unwrap();

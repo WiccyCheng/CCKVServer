@@ -5,7 +5,7 @@ use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::{client::TlsStream as ClientTlsStream, server::TlsStream as ServerTlsStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
-use crate::{ClientSecurityStream, KvError, ServerSecurityStream};
+use crate::KvError;
 use std::io::Cursor;
 use std::sync::Arc;
 
@@ -72,6 +72,21 @@ impl TlsClientConnector {
             domain: Arc::new(domain.into()),
         })
     }
+
+    /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
+    pub async fn connect<S>(&self, stream: S) -> Result<ClientTlsStream<S>, KvError>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send,
+    {
+        let dns = ServerName::try_from(self.domain.as_str())
+            .map_err(|_| KvError::Internal("Invalid DNS name".to_string()))?;
+
+        let stream = TlsConnector::from(self.config.clone())
+            .connect(dns.to_owned(), stream)
+            .await?;
+
+        Ok(stream)
+    }
 }
 
 impl TlsServerAcceptor {
@@ -109,31 +124,8 @@ impl TlsServerAcceptor {
             inner: Arc::new(config),
         })
     }
-}
 
-impl ClientSecurityStream for TlsClientConnector {
-    type Stream<S> = ClientTlsStream<S>;
-
-    /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
-    async fn connect<S>(&self, stream: S) -> Result<Self::Stream<S>, KvError>
-    where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
-    {
-        let dns = ServerName::try_from(self.domain.as_str())
-            .map_err(|_| KvError::Internal("Invalid DNS name".to_string()))?;
-
-        let stream = TlsConnector::from(self.config.clone())
-            .connect(dns.to_owned(), stream)
-            .await?;
-
-        Ok(stream)
-    }
-}
-
-impl ServerSecurityStream for TlsServerAcceptor {
-    type Stream<S> = ServerTlsStream<S>;
-
-    async fn accept<S>(&self, stream: S) -> Result<Self::Stream<S>, KvError>
+    pub async fn accept<S>(&self, stream: S) -> Result<ServerTlsStream<S>, KvError>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
     {
