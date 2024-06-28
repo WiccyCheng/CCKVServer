@@ -1,10 +1,10 @@
-use std::{
-    future,
-    sync::{Arc, Mutex},
-};
+use std::{future, sync::Arc};
 
 use futures::{stream, Future, TryStreamExt};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::Mutex,
+};
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use yamux::{Config, Connection, ConnectionError, Mode};
 
@@ -61,8 +61,15 @@ where
             //    try_for_each_concurrent()为 stream_step1 产生的每个元素异步执行 f
             // 3. stream_step1 既然是个 stream ，在不主动调用 poll_next() 的情况下，是怎么完成的？ 答案在于 tokio,
             //    这里 tokio 会不断调用 poll_next() 并轮询每个 substream
-            stream::poll_fn(move |cx| conn_cloned.lock().unwrap().poll_next_inbound(cx))
-                .try_for_each_concurrent(None, f),
+            async move {
+                // 锁的大部分时间都用于处理子流的数据，只有当创建新的子流时才让出
+                // 所以这里我们把锁的颗粒度从 stream::poll_next() 里面提到外面
+                // 避免每次 poll_next() 带来频繁的锁释放和获取
+                let mut conn = conn_cloned.lock().await;
+                let _ = stream::poll_fn(move |cx| conn.poll_next_inbound(cx))
+                    .try_for_each_concurrent(None, f)
+                    .await;
+            },
         );
 
         Self { conn }
@@ -70,9 +77,9 @@ where
 
     // 打开一个新的 substream
     pub async fn open_stream(&mut self) -> Result<Compat<yamux::Stream>, ConnectionError> {
+        let mut conn = self.conn.lock().await;
         // future::poll_fn() 与 上面的 stream::poll_fn()不同，它产生一个 Future 而不是 Stream
-        let stream =
-            future::poll_fn(|cx| self.conn.clone().lock().unwrap().poll_new_outbound(cx)).await?;
+        let stream = future::poll_fn(move |cx| conn.poll_new_outbound(cx)).await?;
         Ok(stream.compat())
     }
 }
