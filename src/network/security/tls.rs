@@ -184,24 +184,16 @@ mod tests {
 
     use super::*;
     use anyhow::Result;
+    use tls_utils::{tls_acceptor, tls_connector};
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
     };
 
-    const CA_CERT: &str = include_str!("../../../fixtures/ca.cert");
-    const CLIENT_CERT: &str = include_str!("../../../fixtures/client.cert");
-    const CLIENT_KEY: &str = include_str!("../../../fixtures/client.key");
-    const SERVER_CERT: &str = include_str!("../../../fixtures/server.cert");
-    const SERVER_KEY: &str = include_str!("../../../fixtures/server.key");
-
     #[tokio::test]
     async fn tls_should_work() -> Result<()> {
-        let ca = Some(CA_CERT);
-
-        let addr = start_server(None).await?;
-
-        let connector = TlsClientConnector::new("kvserver.acme.inc", None, ca)?;
+        let addr = start_server(false).await?;
+        let connector = tls_connector(false)?;
         let stream = TcpStream::connect(addr).await?;
         let mut stream = connector.connect(stream).await?;
         stream.write_all(b"hello world!").await?;
@@ -214,12 +206,8 @@ mod tests {
 
     #[tokio::test]
     async fn tls_with_client_cert_should_work() -> Result<()> {
-        let client_identity = Some((CLIENT_CERT, CLIENT_KEY));
-        let ca = Some(CA_CERT);
-
-        let addr = start_server(ca).await?;
-
-        let connector = TlsClientConnector::new("kvserver.acme.inc", client_identity, ca)?;
+        let addr = start_server(true).await?;
+        let connector = tls_connector(true)?;
         let stream = TcpStream::connect(addr).await?;
         let mut stream = connector.connect(stream).await?;
         stream.write_all(b"hello world!").await?;
@@ -232,11 +220,12 @@ mod tests {
 
     #[tokio::test]
     async fn tls_with_bad_domain_should_not_work() -> Result<()> {
-        let addr = start_server(None).await?;
+        let addr = start_server(false).await?;
 
-        let connector = TlsClientConnector::new("kvserver1.acme.inc", None, Some(CA_CERT))?;
-        let srteam = TcpStream::connect(addr).await?;
-        let result = connector.connect(srteam).await;
+        let mut connector = tls_connector(false)?;
+        connector.domain = Arc::new("kvserver1.acme.inc".into());
+        let stream = TcpStream::connect(addr).await?;
+        let result = connector.connect(stream).await;
 
         assert!(result.is_err());
 
@@ -245,10 +234,10 @@ mod tests {
 
     #[tokio::test]
     async fn tls_with_client_has_no_cert_should_not_work() -> Result<()> {
-        let addr = start_server(Some(CA_CERT)).await?;
+        let addr = start_server(true).await?;
 
-        let connector = TlsClientConnector::new("kvserver.acme.inc", None, Some(CA_CERT))?;
         let stream = TcpStream::connect(addr).await.unwrap();
+        let connector = tls_connector(false)?;
         // 开始tls握手，由于tls握手是异步操作，此时tls握手一般还未完成
         let mut stream = connector.connect(stream).await.unwrap();
 
@@ -260,15 +249,14 @@ mod tests {
         Ok(())
     }
 
-    async fn start_server(ca: Option<&str>) -> Result<SocketAddr> {
-        let acceptor = TlsServerAcceptor::new(SERVER_CERT, SERVER_KEY, ca)?;
+    async fn start_server(client_cert: bool) -> Result<SocketAddr> {
+        let acceptor = tls_acceptor(client_cert)?;
 
         let echo = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = echo.local_addr().unwrap();
 
         tokio::spawn(async move {
             let (stream, _) = echo.accept().await.unwrap();
-            // 在开启客户端验证的情况下，客户端无证书时建连失败
             if let Ok(mut stream) = acceptor.accept(stream).await {
                 let mut buf = [0; 12];
                 stream.read_exact(&mut buf).await.unwrap();
@@ -277,5 +265,34 @@ mod tests {
         });
 
         Ok(addr)
+    }
+}
+
+#[cfg(test)]
+pub mod tls_utils {
+    use crate::{KvError, TlsClientConnector, TlsServerAcceptor};
+
+    const CA_CERT: &str = include_str!("../../../fixtures/ca.cert");
+    const CLIENT_CERT: &str = include_str!("../../../fixtures/client.cert");
+    const CLIENT_KEY: &str = include_str!("../../../fixtures/client.key");
+    const SERVER_CERT: &str = include_str!("../../../fixtures/server.cert");
+    const SERVER_KEY: &str = include_str!("../../../fixtures/server.key");
+
+    pub fn tls_connector(client_cert: bool) -> Result<TlsClientConnector, KvError> {
+        let ca = Some(CA_CERT);
+        let client_identity = Some((CLIENT_CERT, CLIENT_KEY));
+
+        match client_cert {
+            false => TlsClientConnector::new("kvserver.acme.inc", None, ca),
+            true => TlsClientConnector::new("kvserver.acme.inc", client_identity, ca),
+        }
+    }
+
+    pub fn tls_acceptor(client_cert: bool) -> Result<TlsServerAcceptor, KvError> {
+        let ca = Some(CA_CERT);
+        match client_cert {
+            true => TlsServerAcceptor::new(SERVER_CERT, SERVER_KEY, ca),
+            false => TlsServerAcceptor::new(SERVER_CERT, SERVER_KEY, None),
+        }
     }
 }
