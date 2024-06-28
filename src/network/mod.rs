@@ -1,5 +1,6 @@
 mod compressor;
 mod frame;
+mod multiplex;
 mod security;
 mod stream;
 
@@ -144,6 +145,7 @@ pub mod utils {
     use std::task::Poll;
     use tokio::io::{AsyncRead, AsyncWrite};
 
+    #[derive(Default)]
     pub struct DummyStream {
         pub buf: BytesMut,
     }

@@ -137,8 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn prost_stream_should_work() -> Result<()> {
-        let buf = BytesMut::new();
-        let stream = DummyStream { buf };
+        let stream = DummyStream::default();
         let mut stream = ProstStream::<_, CommandRequest, CommandRequest>::new(stream);
         let cmd = CommandRequest::new_hdel("table", "key");
         stream.send(cmd.clone()).await?;
