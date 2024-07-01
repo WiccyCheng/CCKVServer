@@ -4,7 +4,7 @@ impl CommandService for Hget {
     fn execute(self, store: &impl Storage) -> CommandResponse {
         match store.get(&self.table, &self.key) {
             Ok(Some(v)) => v.into(),
-            Ok(None) => KvError::NotFound(self.table, self.key).into(),
+            Ok(None) => KvError::NotFound(format!("table {}, key {}", self.table, self.key)).into(),
             Err(e) => e.into(),
         }
     }
@@ -110,7 +110,7 @@ impl CommandService for Hmexist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_res_error, assert_res_ok, command_request::RequestData};
+    use crate::{assert_res_error, assert_res_ok};
 
     #[test]
     fn hset_should_work() {
@@ -118,11 +118,11 @@ mod tests {
         let cmd = CommandRequest::new_hset("table", "hello", "world");
         let res = dispatch(cmd.clone(), &store);
         // 第一次插入返回之前的值为空
-        assert_res_ok(res, &[Value::default()], &[]);
+        assert_res_ok(&res, &[Value::default()], &[]);
 
         let res = dispatch(cmd, &store);
         // 再次插入返回之前的值
-        assert_res_ok(res, &["world".into()], &[]);
+        assert_res_ok(&res, &["world".into()], &[]);
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
         dispatch(cmd, &store);
         let cmd = CommandRequest::new_hget("score", "u1");
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[10.into()], &[]);
+        assert_res_ok(&res, &[10.into()], &[]);
     }
 
     #[test]
@@ -143,11 +143,11 @@ mod tests {
 
         let cmd = CommandRequest::new_hdel("table", "key");
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[10.into()], &[]);
+        assert_res_ok(&res, &[10.into()], &[]);
 
         let cmd = CommandRequest::new_hexist("table", "key");
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[false.into()], &[]);
+        assert_res_ok(&res, &[false.into()], &[]);
     }
 
     #[test]
@@ -156,14 +156,14 @@ mod tests {
         // 不存在的 key 应返回 false
         let cmd = CommandRequest::new_hexist("table", "key");
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[false.into()], &[]);
+        assert_res_ok(&res, &[false.into()], &[]);
 
         // 存在的 key 返回 true
         let cmd = CommandRequest::new_hset("table", "key", 10);
         dispatch(cmd, &store);
         let cmd = CommandRequest::new_hexist("table", "key");
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[true.into()], &[]);
+        assert_res_ok(&res, &[true.into()], &[]);
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
         let store = MemTable::new();
         let cmd = CommandRequest::new_hget("non exist table", "non exist key");
         let res = dispatch(cmd, &store);
-        assert_res_error(res, 404, "Not found");
+        assert_res_error(&res, 404, "Not found");
     }
 
     #[test]
@@ -194,7 +194,7 @@ mod tests {
             Kvpair::new("u2", 9),
             Kvpair::new("u3", 23),
         ];
-        assert_res_ok(res, &[], pairs);
+        assert_res_ok(&res, &[], pairs);
     }
 
     #[test]
@@ -216,7 +216,7 @@ mod tests {
         );
         let res = dispatch(cmd, &store);
         assert_res_ok(
-            res,
+            &res,
             &[
                 1.into(),
                 2.into(),
@@ -243,7 +243,7 @@ mod tests {
 
         let cmd = CommandRequest::new_hgetall("table");
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[], pairs);
+        assert_res_ok(&res, &[], pairs);
     }
 
     #[test]
@@ -261,7 +261,7 @@ mod tests {
 
         let cmd = CommandRequest::new_hmdel("table", vec!["key1", "key2", "key3", "key4"]);
         let res = dispatch(cmd, &store);
-        assert_res_ok(res, &[1.into(), 2.into(), 3.into(), 4.into()], &[]);
+        assert_res_ok(&res, &[1.into(), 2.into(), 3.into(), 4.into()], &[]);
     }
 
     #[test]
@@ -278,24 +278,9 @@ mod tests {
         let cmd = CommandRequest::new_hmexist("table", vec!["key1", "key2", "key3", "key4"]);
         let res = dispatch(cmd, &store);
         assert_res_ok(
-            res,
+            &res,
             &[true.into(), false.into(), true.into(), false.into()],
             &[],
         );
-    }
-
-    // 从 Request 中获得 Responese 目前只处理 HGET/HSET/HGETALL
-    fn dispatch(cmd: CommandRequest, store: &impl Storage) -> CommandResponse {
-        match cmd.request_data.unwrap() {
-            RequestData::Hget(v) => v.execute(store),
-            RequestData::Hset(v) => v.execute(store),
-            RequestData::Hdel(v) => v.execute(store),
-            RequestData::Hexist(v) => v.execute(store),
-            RequestData::Hmget(v) => v.execute(store),
-            RequestData::Hmset(v) => v.execute(store),
-            RequestData::Hmdel(v) => v.execute(store),
-            RequestData::Hmexist(v) => v.execute(store),
-            RequestData::Hgetall(v) => v.execute(store),
-        }
     }
 }

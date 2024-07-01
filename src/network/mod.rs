@@ -3,13 +3,16 @@ mod frame;
 mod multiplex;
 mod security;
 mod stream;
+mod stream_result;
 
 pub use compressor::*;
 pub use frame::FrameCoder;
+pub use multiplex::*;
 pub use security::*;
 use stream::*;
 
 use futures::{SinkExt, StreamExt};
+use stream_result::StreamResult;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::info;
 
@@ -41,8 +44,10 @@ where
         let stream = &mut self.inner;
         while let Some(Ok(cmd)) = stream.next().await {
             info!("Got a new command: {cmd:?}");
-            let res = self.service.execute(cmd);
-            stream.send(res).await?;
+            let mut res = self.service.execute(cmd);
+            while let Some(data) = res.next().await {
+                stream.send(&data).await?;
+            }
         }
         Ok(())
     }
@@ -50,7 +55,7 @@ where
 
 impl<S> ProstClientStream<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     pub fn new(stream: S) -> Self {
         Self {
@@ -58,14 +63,26 @@ where
         }
     }
 
-    pub async fn execute(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
+    pub async fn execute_unary(
+        &mut self,
+        cmd: &CommandRequest,
+    ) -> Result<CommandResponse, KvError> {
         let stream = &mut self.inner;
-        stream.send(cmd).await?;
+        stream.send(&cmd).await?;
 
         match stream.next().await {
             Some(v) => v,
             None => Err(KvError::Internal("Didn't get any response".into())),
         }
+    }
+
+    pub async fn execute_streaming(self, cmd: &CommandRequest) -> Result<StreamResult, KvError> {
+        let mut stream = self.inner;
+
+        stream.send(cmd).await?;
+        stream.close().await?;
+
+        StreamResult::new(stream).await
     }
 }
 
@@ -88,15 +105,25 @@ mod tests {
         let stream = TcpStream::connect(addr).await?;
         let mut client = ProstClientStream::new(stream);
 
+        // 发送 HSET，等待回应
         let cmd = CommandRequest::new_hset("table", "key", "value");
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
 
-        assert_res_ok(res, &[Value::default()], &[]);
+        // 第一次 HSET 服务器应该返回 None
+        assert_res_ok(&res, &[Value::default()], &[]);
 
+        // 再发一个 HSET
         let cmd = CommandRequest::new_hget("table", "key");
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
 
-        assert_res_ok(res, &["value".into()], &[]);
+        // 服务器应该返回上一次的结果
+        assert_res_ok(&res, &["value".into()], &[]);
+
+        // 发一个 SUBSCRIBE
+        let cmd = CommandRequest::new_subscribe("chat");
+        let res = client.execute_streaming(&cmd).await.unwrap();
+        let id = res.id;
+        assert!(id > 0);
 
         Ok(())
     }
@@ -110,14 +137,14 @@ mod tests {
 
         let value: Value = Bytes::from(vec![0u8; 16384]).into();
         let cmd = CommandRequest::new_hset("table", "key", value.clone());
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
 
-        assert_res_ok(res, &[Value::default()], &[]);
+        assert_res_ok(&res, &[Value::default()], &[]);
 
         let cmd = CommandRequest::new_hget("table", "key");
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
 
-        assert_res_ok(res, &[value.into()], &[]);
+        assert_res_ok(&res, &[value.into()], &[]);
 
         Ok(())
     }
@@ -142,7 +169,7 @@ mod tests {
 #[cfg(test)]
 pub mod utils {
     use bytes::{BufMut, BytesMut};
-    use std::task::Poll;
+    use std::{cmp::min, task::Poll};
     use tokio::io::{AsyncRead, AsyncWrite};
 
     #[derive(Default)]
@@ -157,10 +184,11 @@ pub mod utils {
             buf: &mut tokio::io::ReadBuf<'_>,
         ) -> std::task::Poll<std::io::Result<()>> {
             // 看看 Reader 需要多大的数据
-            let len = buf.capacity();
+            let this = self.get_mut();
+            let len = min(buf.capacity(), this.buf.len());
 
             // split 出这么大的数据
-            let data = self.get_mut().buf.split_to(len);
+            let data = this.buf.split_to(len);
 
             // 拷贝给 ReadBuf
             buf.put_slice(&data);

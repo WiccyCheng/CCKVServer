@@ -1,16 +1,15 @@
-use crate::Value;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum KvError {
-    #[error("Not found for table: {0}, key: {1}")]
-    NotFound(String, String),
+    #[error("Not found {0}")]
+    NotFound(String),
     #[error("Frame is larger than max size")]
     FrameError,
     #[error("Command is invalid {0}")]
-    InvaildCommand(String),
-    #[error("Cannot convert value {0:?} to {1}")]
-    ConvertError(Value, &'static str),
+    InvalidCommand(String),
+    #[error("Cannot convert value {0} to {1}")]
+    ConvertError(String, &'static str),
     #[error("Cannot process command {command} with table: {table}, key: {key}. Error: {error}")]
     StorageError {
         command: &'static str,
@@ -35,6 +34,8 @@ pub enum KvError {
     TlsError(#[from] tokio_rustls::rustls::Error),
     #[error("noise error")]
     NoiseError(#[from] snow::Error),
+    #[error("Yamux Connection error")]
+    YamuxConnectionError(#[from] yamux::ConnectionError),
 
     #[error("Internal error: {0}")]
     Internal(String),

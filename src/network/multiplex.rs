@@ -1,16 +1,18 @@
-use std::{
-    future,
-    sync::{Arc, Mutex},
-};
+use std::{future, sync::Arc};
 
 use futures::{stream, Future, TryStreamExt};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::Mutex,
+};
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use yamux::{Config, Connection, ConnectionError, Mode};
 
 // Yamux 控制结构
 pub struct YamuxBuilder<S> {
     // yamux control, 用于创建新的 stream
+    // TODO(Wiccy): Currently multiplexing will cause deadlock due to lock racing
+    // lock should be refactored with channel
     conn: Arc<Mutex<Connection<Compat<S>>>>,
 }
 
@@ -61,8 +63,15 @@ where
             //    try_for_each_concurrent()为 stream_step1 产生的每个元素异步执行 f
             // 3. stream_step1 既然是个 stream ，在不主动调用 poll_next() 的情况下，是怎么完成的？ 答案在于 tokio,
             //    这里 tokio 会不断调用 poll_next() 并轮询每个 substream
-            stream::poll_fn(move |cx| conn_cloned.lock().unwrap().poll_next_inbound(cx))
-                .try_for_each_concurrent(None, f),
+            async move {
+                let mut conn = conn_cloned.lock().await;
+                if let Err(err) = stream::poll_fn(|cx| conn.poll_next_inbound(cx))
+                    .try_for_each_concurrent(None, f)
+                    .await
+                {
+                    panic!("multiplexing failed for connection error: {err}");
+                };
+            },
         );
 
         Self { conn }
@@ -70,9 +79,9 @@ where
 
     // 打开一个新的 substream
     pub async fn open_stream(&mut self) -> Result<Compat<yamux::Stream>, ConnectionError> {
+        let mut conn = self.conn.lock().await;
         // future::poll_fn() 与 上面的 stream::poll_fn()不同，它产生一个 Future 而不是 Stream
-        let stream =
-            future::poll_fn(|cx| self.conn.clone().lock().unwrap().poll_new_outbound(cx)).await?;
+        let stream = future::poll_fn(|cx| conn.poll_new_outbound(cx)).await?;
         Ok(stream.compat())
     }
 }
@@ -122,11 +131,11 @@ mod tests {
         let mut client = ProstClientStream::new(stream);
 
         let cmd = CommandRequest::new_hset("table", "key", "value");
-        client.execute(cmd).await.unwrap();
+        client.execute_unary(&cmd).await.unwrap();
 
         let cmd = CommandRequest::new_hget("table", "key");
-        let res = client.execute(cmd).await.unwrap();
-        assert_res_ok(res, &["value".into()], &[]);
+        let res = client.execute_unary(&cmd).await.unwrap();
+        assert_res_ok(&res, &["value".into()], &[]);
 
         Ok(())
     }

@@ -1,7 +1,9 @@
 use anyhow::Result;
-use kv::{CommandRequest, ProstClientStream, TlsClientConnector};
+use futures::StreamExt;
+use kv::{CommandRequest, ProstClientStream, TlsClientConnector, YamuxBuilder};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use std::collections::HashMap;
 use tokio::net::TcpStream;
 
 #[tokio::main]
@@ -19,6 +21,8 @@ async fn main() -> Result<()> {
     let connector = TlsClientConnector::new("kvserver.acme.inc", client_identity, ca_cert)?;
     let stream = TcpStream::connect(addr).await?;
     let stream = connector.connect(stream).await?;
+    let mut connection = YamuxBuilder::new_client(stream, None);
+    let stream = connection.open_stream().await?;
     let mut client = ProstClientStream::new(stream);
 
     let mut editor = DefaultEditor::new()?;
@@ -27,6 +31,7 @@ async fn main() -> Result<()> {
     }
 
     let mut current_table = "default".to_string();
+    let mut topic_map = HashMap::new();
     loop {
         let table = current_table.clone();
         let prompt = format!("kvserver[table:{}]> ", table.clone());
@@ -40,6 +45,7 @@ async fn main() -> Result<()> {
                 }
                 let command = args[0].to_lowercase();
                 match command.as_str() {
+                    // kv command
                     "get" => {
                         if args.len() < 2 {
                             println!("Usage: GET <key>");
@@ -47,7 +53,7 @@ async fn main() -> Result<()> {
                         }
 
                         let cmd = CommandRequest::new_hget(table, args[1]);
-                        let data = client.execute(cmd).await?;
+                        let data = client.execute_unary(&cmd).await?;
                         println!("{data}");
                     }
                     "set" => {
@@ -57,7 +63,7 @@ async fn main() -> Result<()> {
                         }
 
                         let cmd = CommandRequest::new_hset(table, args[1], args[2]);
-                        let data = client.execute(cmd).await?;
+                        let data = client.execute_unary(&cmd).await?;
                         println!("{data}");
                     }
                     "del" => {
@@ -67,7 +73,7 @@ async fn main() -> Result<()> {
                         }
 
                         let cmd = CommandRequest::new_hdel(table, args[1]);
-                        let data = client.execute(cmd).await?;
+                        let data = client.execute_unary(&cmd).await?;
                         println!("{data}");
                     }
                     "exist" => {
@@ -77,7 +83,7 @@ async fn main() -> Result<()> {
                         }
 
                         let cmd = CommandRequest::new_hexist(table, args[1]);
-                        let data = client.execute(cmd).await?;
+                        let data = client.execute_unary(&cmd).await?;
                         println!("{data}");
                     }
                     "select" => {
@@ -87,6 +93,50 @@ async fn main() -> Result<()> {
                         }
 
                         current_table = args[1].to_string();
+                    }
+
+                    // chat command
+                    "subscribe" => {
+                        if args.len() < 2 {
+                            println!("Usage: SUBSCRIBE <topic>");
+                            continue;
+                        }
+
+                        let cmd = CommandRequest::new_subscribe(args[1]);
+                        let stream = connection.open_stream().await?;
+                        let client = ProstClientStream::new(stream);
+                        let mut stream = client.execute_streaming(&cmd).await.unwrap();
+                        topic_map.insert(args[1].to_owned(), stream.id);
+                        tokio::spawn(async move {
+                            while let Some(Ok(data)) = stream.next().await {
+                                println!("Got published {data:?}",);
+                            }
+                        });
+                    }
+                    "unsubscribe" => {
+                        if args.len() < 2 {
+                            println!("Usage: UNSUBSCRIBE <topic>");
+                            continue;
+                        }
+
+                        if let Some(id) = topic_map.remove(args[1]) {
+                            let cmd = CommandRequest::new_unsubscribe(args[1], id);
+                            let data = client.execute_unary(&cmd).await?;
+                            println!("{data}");
+                        } else {
+                            println!("topic not exist");
+                            continue;
+                        }
+                    }
+                    "publish" => {
+                        if args.len() < 3 {
+                            println!("Usage: PUBLISH <topic> <value>");
+                            continue;
+                        }
+
+                        let cmd = CommandRequest::new_publish(args[1], vec![args[2].into()]);
+                        let data = client.execute_unary(&cmd).await?;
+                        println!("{data}");
                     }
 
                     "quit" | "exit" => {

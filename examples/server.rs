@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bytes::Bytes;
+use bytes::BytesMut;
 use futures::prelude::*;
 use kv::{CommandRequest, MemTable, Service, ServiceInner};
 use prost::Message;
@@ -20,11 +20,17 @@ async fn main() -> Result<()> {
         let svc = service.clone();
         let mut stream = Framed::new(stream, LengthDelimitedCodec::new());
         tokio::spawn(async move {
-            while let Some(Ok(cmd)) = stream.next().await {
-                let cmd = CommandRequest::decode(cmd).unwrap();
+            while let Some(Ok(mut buf)) = stream.next().await {
+                let cmd = CommandRequest::decode(&buf[..]).unwrap();
                 info!("Got a new command: {:?}", cmd);
-                let res = svc.execute(cmd);
-                stream.send(Bytes::from(res.encode_to_vec())).await.unwrap();
+                let mut res = svc.execute(cmd);
+
+                buf.clear();
+                while let Some(data) = res.next().await {
+                    let mut buf = BytesMut::new();
+                    data.encode(&mut buf).unwrap();
+                    stream.send(buf.freeze()).await.unwrap();
+                }
             }
             info!("Client {:?} disconnected", addr);
         });

@@ -32,6 +32,7 @@ rocksdb = { version = "0.22", features = ["multi-threaded-cf"] } # rock db
 tracing-subscriber = "0.3"                                       # 日志处理
 rustyline = "14.0.0"                                             # 命令行解析和处理
 tokio-rustls = "0.26.0"                                          # tls库
+tokio-stream = { version = "0.1", features = ["sync"] }          # 处理 stream
 rustls-native-certs = "0.7"                                      # 获取本地证书
 rustls-pemfile = "2.1.2"                                         # 解析pem文件
 snow = "0.9.6"                                                   # noise库

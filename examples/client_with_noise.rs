@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
 
     let cmd = CommandRequest::new_hset("table", "key", "value");
 
-    let data = client.execute(cmd).await?;
+    let data = client.execute_unary(&cmd).await?;
     info!("Got response {data:?}");
 
     Ok(())
