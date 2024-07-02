@@ -1,19 +1,18 @@
-use std::{future, sync::Arc};
+use std::{future, marker::PhantomData, sync::Arc};
 
 use futures::{stream, Future, TryStreamExt};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::Mutex,
+    sync::{mpsc, oneshot, Mutex},
 };
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use yamux::{Config, Connection, ConnectionError, Mode};
 
 // Yamux 控制结构
 pub struct YamuxBuilder<S> {
-    // yamux control, 用于创建新的 stream
-    // TODO(Wiccy): Currently multiplexing will cause deadlock due to lock racing
-    // lock should be refactored with channel
-    conn: Arc<Mutex<Connection<Compat<S>>>>,
+    // sender 目前仅用于发送创建新的子流
+    sender: mpsc::Sender<oneshot::Sender<Compat<yamux::Stream>>>,
+    _s: PhantomData<S>,
 }
 
 impl<S> YamuxBuilder<S>
@@ -35,7 +34,7 @@ where
         Self::new(stream, config, false, f)
     }
 
-    fn new<F, Fut>(stream: S, config: Option<Config>, is_client: bool, f: F) -> Self
+    fn new<F, Fut>(stream: S, config: Option<Config>, is_client: bool, mut f: F) -> Self
     where
         F: FnMut(yamux::Stream) -> Fut,
         F: Send + 'static,
@@ -55,34 +54,50 @@ where
 
         let conn = Arc::new(Mutex::new(conn));
 
+        let (tx, mut rx) = mpsc::channel::<oneshot::Sender<Compat<yamux::Stream>>>(32);
         let conn_cloned = conn.clone();
-        // pull 所有 stream 下的数据
-        tokio::spawn(
-            // 1. poll_fn() 会创建一个包裹 f 的流，在这里为 调用Connection::poll_next_inbound()获取当前需要处理的 substream
-            // 2. 1.产生的流我们称之为 stream_step1， 那么接下来就会执行 stream_step1.try_for_each_concurrent()
-            //    try_for_each_concurrent()为 stream_step1 产生的每个元素异步执行 f
-            // 3. stream_step1 既然是个 stream ，在不主动调用 poll_next() 的情况下，是怎么完成的？ 答案在于 tokio,
-            //    这里 tokio 会不断调用 poll_next() 并轮询每个 substream
-            async move {
-                let mut conn = conn_cloned.lock().await;
-                if let Err(err) = stream::poll_fn(|cx| conn.poll_next_inbound(cx))
-                    .try_for_each_concurrent(None, f)
-                    .await
-                {
-                    panic!("multiplexing failed for connection error: {err}");
-                };
-            },
-        );
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    Some(sender) = rx.recv() => {
+                        let mut conn = conn_cloned.lock().await;
+                        // TODO(Wiccy): if ask for creating new substream before connection is fully initialzied，panic
+                        // time::sleep(Duration::from_millis(100)).await;
+                        let stream = future::poll_fn(|cx| conn.poll_new_outbound(cx)).await.expect("connection is probably not initialized yet");
+                        let _ = sender.send(stream.compat());
+                    }
+                    // pull 所有 子流 的数据
+                    _ = async {
+                        let mut conn = conn_cloned.lock().await;
+                        // 1. poll_fn() 会根据入参创建一个流，在这里为 调用Connection::poll_next_inbound()获取当前需要处理的子流
+                        // 2. 1.产生的流我们称之为子流集， 那么接下来就会执行子流集.try_for_each_concurrent()
+                        //    try_for_each_concurrent()为子流集 产生的每个子流异步执行 f
+                        // 3.子流集 既然是个 stream ，在不主动调用 poll_next() 的情况下，是怎么完成的？ 答案在于 tokio,
+                        //    这里 tokio 会不断调用 poll_next() 并轮询每个 substream
+                        stream::poll_fn(|cx| conn.poll_next_inbound(cx))
+                            .try_for_each_concurrent(None, |stream| {
+                                let f = f(stream);
+                                f
+                            })
+                            // 调用 await 来等待所有子流处理完毕，否则则会返回 Future，需要我们自己再处理 Future
+                            .await
+                    } => {}
+                }
+            }
+        });
 
-        Self { conn }
+        Self {
+            sender: tx,
+            _s: Default::default(),
+        }
     }
 
     // 打开一个新的 substream
     pub async fn open_stream(&mut self) -> Result<Compat<yamux::Stream>, ConnectionError> {
-        let mut conn = self.conn.lock().await;
         // future::poll_fn() 与 上面的 stream::poll_fn()不同，它产生一个 Future 而不是 Stream
-        let stream = future::poll_fn(|cx| conn.poll_new_outbound(cx)).await?;
-        Ok(stream.compat())
+        let (tx, rx) = oneshot::channel();
+        let _ = self.sender.send(tx).await;
+        rx.await.map_err(|_| ConnectionError::Closed)
     }
 }
 
