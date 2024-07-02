@@ -58,6 +58,9 @@ where
         let conn_cloned = conn.clone();
         tokio::spawn(async move {
             loop {
+                // 在 tokio::select! 中，每个分支的 Future 都会被逐一 poll，因此即使 poll_next_inbound 分支正在运行，只要 rx.recv() 分支准备好，
+                // 它就会被选中执行，获取锁并创建新子流。 因为 tokio::select! 会取消未选中的分支的 Future，并在下一次轮询中重新 poll 它们，
+                // 所以 poll_next_inbound 分支不会无限期占有锁。
                 tokio::select! {
                     Some(sender) = rx.recv() => {
                         let mut conn = conn_cloned.lock().await;
@@ -66,20 +69,15 @@ where
                         let stream = future::poll_fn(|cx| conn.poll_new_outbound(cx)).await.expect("connection is probably not initialized yet");
                         let _ = sender.send(stream.compat());
                     }
-                    // pull 所有 子流 的数据
-                    _ = async {
+                    _ = async { // 一直执行，要么在处理子流数据，要么在等待子流数据到来，除非 poll_next_inbound() 返回 None
                         let mut conn = conn_cloned.lock().await;
-                        // 1. poll_fn() 会根据入参创建一个流，在这里为 调用Connection::poll_next_inbound()获取当前需要处理的子流
-                        // 2. 1.产生的流我们称之为子流集， 那么接下来就会执行子流集.try_for_each_concurrent()
-                        //    try_for_each_concurrent()为子流集 产生的每个子流异步执行 f
-                        // 3.子流集 既然是个 stream ，在不主动调用 poll_next() 的情况下，是怎么完成的？ 答案在于 tokio,
-                        //    这里 tokio 会不断调用 poll_next() 并轮询每个 substream
+                        // 每个 Future 执行完都会释放锁， 所以在任意小 Future 挂起时或大 Future 取消时释放锁
+                        // 在单调度器中，因为不会被 rx.recv() 分支抢占，所以永远不会挂起或取消
                         stream::poll_fn(|cx| conn.poll_next_inbound(cx))
                             .try_for_each_concurrent(None, |stream| {
                                 let f = f(stream);
                                 f
                             })
-                            // 调用 await 来等待所有子流处理完毕，否则则会返回 Future，需要我们自己再处理 Future
                             .await
                     } => {}
                 }
@@ -94,7 +92,6 @@ where
 
     // 打开一个新的 substream
     pub async fn open_stream(&mut self) -> Result<Compat<yamux::Stream>, ConnectionError> {
-        // future::poll_fn() 与 上面的 stream::poll_fn()不同，它产生一个 Future 而不是 Stream
         let (tx, rx) = oneshot::channel();
         let _ = self.sender.send(tx).await;
         rx.await.map_err(|_| ConnectionError::Closed)
