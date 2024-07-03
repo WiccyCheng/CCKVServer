@@ -8,6 +8,7 @@ use gzip::*;
 use lz4::*;
 use zstd::*;
 
+// 处理数据的压缩和解压
 pub trait Compressor {
     fn compress(src: &[u8], dst: &mut BytesMut) -> Result<(), KvError>;
     fn decompress(src: &[u8], dst: &mut Vec<u8>) -> Result<(), KvError>;

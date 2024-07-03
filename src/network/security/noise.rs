@@ -8,13 +8,14 @@ use crate::KvError;
 // TODO(Wiccy): Support multi pattern
 static PATTERN: &'static str = "Noise_NN_25519_ChaChaPoly_BLAKE2s";
 
-// 目前仅支持 Noise 下的 NN 方式
+// 提供 connect 方法将底层协议转换成 noise，目前仅支持 Noise 下的 NN 方式
 pub struct NoiseInitiator<S> {
     stream: S,
     initiator: TransportState,
     read_buf: Vec<u8>,
     write_buf: Vec<u8>,
 }
+// 提供 accept 方法将底层协议转换成 noise，目前仅支持 Noise 下的 NN 方式
 pub struct NoiseResponder<S> {
     stream: S,
     responder: TransportState,
