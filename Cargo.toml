@@ -16,34 +16,55 @@ name = "kvc_cli"
 path = "src/client_cli.rs"
 
 [dependencies]
-anyhow = "1"                                                     # 错误处理
-bytes = "1"                                                      # 高效处理网络 buffer 的库
-dashmap = "6.0.1"                                                # 并发 HashMap
-http = "1.1.0"                                                   # 我们使用 HTTP status code 所以引入这个类型库
-prost = "0.12.6"                                                 # 处理 protobuf 的代码
-thiserror = "1"                                                  # 错误定义和处理
-tracing = "0.1"                                                  # 日志处理
-sled = "0.34"                                                    # sled db
-flate2 = "1"                                                     # gzip压缩
-lz4 = "1"                                                        # lz4压缩
-zstd = "0.13"                                                    # zstd压缩
-tokio = { version = "1", features = ["full"] }                   # 异步网络库
+anyhow = "1" # 错误处理
+bytes = "1" # 高效处理网络 buffer 的库
+dashmap = "6.0.1" # 并发 HashMap
+http = "1.1.0" # 我们使用 HTTP status code 所以引入这个类型库
+prost = "0.12.6" # 处理 protobuf 的代码
+thiserror = "1" # 错误定义和处理
+tracing = "0.1" # 日志处理
+sled = "0.34" # sled db
+flate2 = "1" # gzip压缩
+lz4 = "1" # lz4压缩
+zstd = "0.13" # zstd压缩
+tokio = { version = "1.38", features = ["full"] } # 异步网络库
 rocksdb = { version = "0.22", features = ["multi-threaded-cf"] } # rock db
-tracing-subscriber = "0.3"                                       # 日志处理
-rustyline = "14.0.0"                                             # 命令行解析和处理
-tokio-rustls = "0.26.0"                                          # tls库
-tokio-stream = { version = "0.1", features = ["sync"] }          # 处理 stream
-rustls-native-certs = "0.7"                                      # 获取本地证书
-rustls-pemfile = "2.1.2"                                         # 解析pem文件
-snow = "0.9.6"                                                   # noise库
-futures = "0.3"                                                  # 提供 Stream trait
-yamux = "0.13.0"                                                 # 多路复用支持
-tokio-util = { version = "0.7", features = ["compat"] }          # tokio和futures的兼容性库
+rustyline = "14.0.0" # 命令行解析和处理
+tokio-rustls = "0.26.0" # tls库
+tokio-stream = { version = "0.1", features = ["sync"] } # 处理 stream
+rustls-native-certs = "0.7" # 获取本地证书
+rustls-pemfile = "2.1.2" # 解析pem文件
+snow = "0.9.6" # noise库
+futures = "0.3" # 提供 Stream trait
+yamux = "0.13.0" # 多路复用支持
+tokio-util = { version = "0.7", features = ["compat"] } # tokio和futures的兼容性库
+serde = { version = "1", features = ["derive"] } # 序列化/反序列化
+toml = "0.8" # toml支持
+opentelemetry = "0.23" # opentelemetry 支持
+opentelemetry-otlp = "0.16" # opentelemetry otlp 支持
+opentelemetry_sdk = { version = "0.23", features = ["rt-tokio"] }
+tracing-appender = "0.2" # 文件日志
+tracing-opentelemetry = "0.24" # opentelemetry 支持
+tracing-subscriber = { version = "0.3", features = [
+    "json",
+    "chrono",
+    "env-filter",
+] } # 日志处理
 
 [dev-dependencies]
 tokio-util = { version = "0.7", features = ["codec"] }
 tempfile = "3"
 certify = "0.5.2"
+rand = "0.8" #随机数处理
+criterion = { version = "0.5", features = [
+    "async_futures",
+    "async_tokio",
+    "html_reports",
+] } #benchmark
 
 [build-dependencies]
 prost-build = "0.12.6" # 编译 protobuf
+
+[[bench]]
+name = "pubsub"
+harness = false

@@ -4,6 +4,7 @@ use tokio_rustls::rustls::server::WebPkiClientVerifier;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::{client::TlsStream as ClientTlsStream, server::TlsStream as ServerTlsStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
+use tracing::instrument;
 
 use crate::KvError;
 use std::io::Cursor;
@@ -30,6 +31,7 @@ pub struct TlsStream;
 impl TlsClientConnector {
     /// 加载 client cert / CA cert，生成 ClientConfig
     /// server_ca 选项应传递根证书
+    #[instrument(name = "tls_connector_new", skip_all)]
     pub fn new(
         domain: impl Into<String>,
         identity: Option<(&str, &str)>,
@@ -39,16 +41,18 @@ impl TlsClientConnector {
         server_ca: Option<&str>,
     ) -> Result<Self, KvError> {
         let mut root_cert_store = RootCertStore::empty();
-        // 加载本地信任的根证书链
-        for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs")
-        {
-            root_cert_store.add(cert)?;
-        }
 
         // 如果有签署服务器的 CA 证书，则加载它，这样服务器证书不在根证书链
         // 但是这个 CA 证书能验证它，也可以
         if let Some(server_ca) = server_ca {
             root_cert_store.add_parsable_certificates(load_certs(server_ca)?);
+        } else {
+            // 加载本地信任的根证书链
+            for cert in
+                rustls_native_certs::load_native_certs().expect("could not load platform certs")
+            {
+                root_cert_store.add(cert)?;
+            }
         }
 
         let config = match identity {
@@ -74,6 +78,7 @@ impl TlsClientConnector {
     }
 
     /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
+    #[instrument(name = "tls_client_connect", skip_all)]
     pub async fn connect<S>(&self, stream: S) -> Result<ClientTlsStream<S>, KvError>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -92,6 +97,7 @@ impl TlsClientConnector {
 impl TlsServerAcceptor {
     /// 加载 server cert / CA cert，生成 ServerConfig
     /// client_ca 不为空时将验证客户端证书
+    #[instrument(name = "tls_acceptor_new", skip_all)]
     pub fn new(cert: &str, key: &str, client_ca: Option<&str>) -> Result<Self, KvError> {
         let certs = load_certs(cert)?
             .into_iter()
@@ -125,6 +131,7 @@ impl TlsServerAcceptor {
         })
     }
 
+    #[instrument(name = "tls_server_accept", skip_all)]
     pub async fn accept<S>(&self, stream: S) -> Result<ServerTlsStream<S>, KvError>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,

@@ -6,6 +6,7 @@ use tokio::{
     sync::{mpsc, oneshot, Mutex},
 };
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::instrument;
 use yamux::{Config, Connection, ConnectionError, Mode};
 
 // Yamux 控制结构
@@ -24,7 +25,7 @@ where
         Self::new(stream, config, true, |_stream| future::ready(Ok(())))
     }
 
-    // 创建 YamuxCtrl 服务端，服务端 loop 在处理 substream
+    // 创建 Yamux 服务端，服务端 loop 在处理 substream
     pub fn new_server<F, Fut>(stream: S, config: Option<Config>, f: F) -> Self
     where
         F: FnMut(yamux::Stream) -> Fut,
@@ -34,6 +35,7 @@ where
         Self::new(stream, config, false, f)
     }
 
+    #[instrument(name = "yamux_builder_new", skip_all)]
     fn new<F, Fut>(stream: S, config: Option<Config>, is_client: bool, mut f: F) -> Self
     where
         F: FnMut(yamux::Stream) -> Fut,
@@ -91,6 +93,7 @@ where
     }
 
     // 打开一个新的 substream
+    #[instrument(skip_all)]
     pub async fn open_stream(&mut self) -> Result<Compat<yamux::Stream>, ConnectionError> {
         let (tx, rx) = oneshot::channel();
         let _ = self.sender.send(tx).await;
