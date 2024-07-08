@@ -36,6 +36,8 @@ pub enum KvError {
     NoiseError(#[from] snow::Error),
     #[error("Yamux Connection error")]
     YamuxConnectionError(#[from] yamux::ConnectionError),
+    #[error("Quic Connection error")]
+    QuicConnectionError(#[from] s2n_quic::connection::Error),
     #[error("Parse config error")]
     ConfigError(#[from] toml::de::Error),
 

@@ -2,8 +2,8 @@ use anyhow::Result;
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
 use kv::{
-    start_client_with_config, start_server_with_config, ClientConfig, CommandRequest,
-    ProstClientStream, ServerConfig, StorageConfig, YamuxBuilder,
+    start_server_with_config, start_yamux_client_with_config, AppStream, ClientConfig,
+    CommandRequest, ServerConfig, StorageConfig, YamuxConn,
 };
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{runtime, trace, Resource};
@@ -27,20 +27,19 @@ async fn start_server() -> Result<()> {
     Ok(())
 }
 
-async fn connect() -> Result<YamuxBuilder<TlsStream<TcpStream>>> {
+async fn connect() -> Result<YamuxConn<TlsStream<TcpStream>>> {
     let addr = "127.0.0.1:1973";
     let mut config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
     config.general.addr = addr.into();
 
-    Ok(start_client_with_config(&config).await?)
+    Ok(start_yamux_client_with_config(&config).await?)
 }
 
 async fn start_subscribers(topic: &'static str) -> Result<()> {
-    let mut builder = connect().await?;
-    let stream = builder.open_stream().await?;
+    let mut connection = connect().await?;
+    let client = connection.open_stream().await?;
     info!("C(subscriber): stream opened");
     let cmd = CommandRequest::new_subscribe(topic.to_string());
-    let client = ProstClientStream::new(stream);
     tokio::spawn(async move {
         let mut stream = client.execute_streaming(&cmd).await.unwrap();
         while let Some(Ok(data)) = stream.next().await {
@@ -55,9 +54,8 @@ async fn start_publishers(topic: &'static str, values: &'static [&'static str]) 
     let mut rng = rand::thread_rng();
     let v = values.choose(&mut rng).unwrap();
 
-    let mut builder = connect().await.unwrap();
-    let stream = builder.open_stream().await.unwrap();
-    let mut client = ProstClientStream::new(stream);
+    let mut connection = connect().await?;
+    let mut client = connection.open_stream().await?;
     info!("C(publishers): stream opened");
 
     let cmd = CommandRequest::new_publish(topic.to_string(), vec![(*v).into()]);

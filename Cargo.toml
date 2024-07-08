@@ -35,6 +35,7 @@ tokio-stream = { version = "0.1", features = ["sync"] } # 处理 stream
 rustls-native-certs = "0.7" # 获取本地证书
 rustls-pemfile = "2.1.2" # 解析pem文件
 snow = "0.9.6" # noise库
+s2n-quic = "1" #quic协议
 futures = "0.3" # 提供 Stream trait
 yamux = "0.13.0" # 多路复用支持
 tokio-util = { version = "0.7", features = ["compat"] } # tokio和futures的兼容性库

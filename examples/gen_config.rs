@@ -11,7 +11,8 @@ fn main() -> Result<()> {
     const SERVER_KEY: &str = include_str!("../fixtures/server.key");
 
     let general_config = GeneralConfig {
-        addr: "127.0.0.1:9527".into(),
+        addr: "127.0.0.1:1973".into(),
+        network: kv::NetworkType::Tcp,
     };
 
     let server_config = ServerConfig {

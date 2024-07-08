@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use anyhow::Result;
 use kv::{
-    start_client_with_config, start_server_with_config, ClientConfig, CommandRequest,
-    ProstClientStream, ServerConfig, StorageConfig,
+    start_server_with_config, start_yamux_client_with_config, AppStream, ClientConfig,
+    CommandRequest, ServerConfig, StorageConfig,
 };
 use tokio::time;
 
@@ -23,9 +23,8 @@ async fn yamux_server_client_full_tests() -> Result<()> {
     let mut config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
     config.general.addr = addr.into();
 
-    let mut builder = start_client_with_config(&config).await.unwrap();
-    let stream = builder.open_stream().await?;
-    let mut client = ProstClientStream::new(stream);
+    let mut connection = start_yamux_client_with_config(&config).await.unwrap();
+    let mut client = connection.open_stream().await?;
 
     // 生成一个 HSET 命令
     let cmd = CommandRequest::new_hset("table", "hello", "world");

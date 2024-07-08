@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures::StreamExt;
-use kv::{CommandRequest, KvError, ProstClientStream, TlsClientConnector, YamuxBuilder};
+use kv::{AppStream, CommandRequest, KvError, ProstClientStream, TlsClientConnector, YamuxConn};
 use std::time::Duration;
 use tokio::{net::TcpStream, time};
 use tokio_util::compat::Compat;
@@ -21,21 +21,20 @@ async fn main() -> Result<()> {
     let connector = TlsClientConnector::new("kvserver.acme.inc", client_identity, ca_cert)?;
     let stream = TcpStream::connect(addr).await?;
     let stream = connector.connect(stream).await?;
-    let mut connection = YamuxBuilder::new_client(stream, None);
+    let mut connection = YamuxConn::new_client(stream, None);
 
     let channel = "lobby";
     start_publishing(connection.open_stream().await?, &channel)?;
 
-    let stream = connection.open_stream().await?;
-    let mut client = ProstClientStream::new(stream);
+    let mut stream = connection.open_stream().await?;
 
     let cmd = CommandRequest::new_hset("table", "key", "value");
-    let data = client.execute_unary(&cmd).await?;
+    let data = stream.execute_unary(&cmd).await?;
     info!("Got response {data:?}");
 
     // 生成一个 Subscribe 命令
     let cmd = CommandRequest::new_subscribe(channel);
-    let mut stream = client.execute_streaming(&cmd).await?;
+    let mut stream = stream.execute_streaming(&cmd).await?;
     let id = stream.id;
     start_unsubscribe(connection.open_stream().await?, &channel, id)?;
 
@@ -46,12 +45,14 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-pub fn start_publishing(stream: Compat<yamux::Stream>, name: &str) -> Result<(), KvError> {
+pub fn start_publishing(
+    mut stream: ProstClientStream<Compat<yamux::Stream>>,
+    name: &str,
+) -> Result<(), KvError> {
     let cmd = CommandRequest::new_publish(name, vec![1.into(), 2.into(), "hello".into()]);
     tokio::spawn(async move {
         time::sleep(Duration::from_millis(1000)).await;
-        let mut client = ProstClientStream::new(stream);
-        let res = client.execute_unary(&cmd).await.unwrap();
+        let res = stream.execute_unary(&cmd).await.unwrap();
         println!("Finished publishing: {res:?}");
     });
 
@@ -59,15 +60,14 @@ pub fn start_publishing(stream: Compat<yamux::Stream>, name: &str) -> Result<(),
 }
 
 pub fn start_unsubscribe(
-    stream: Compat<yamux::Stream>,
+    mut stream: ProstClientStream<Compat<yamux::Stream>>,
     name: &str,
     id: u32,
 ) -> Result<(), KvError> {
     let cmd = CommandRequest::new_unsubscribe(name, id);
     tokio::spawn(async move {
         time::sleep(Duration::from_millis(1000)).await;
-        let mut client = ProstClientStream::new(stream);
-        let res = client.execute_unary(&cmd).await.unwrap();
+        let res = stream.execute_unary(&cmd).await.unwrap();
         println!("Finished unsubscribing: {res:?}");
     });
 

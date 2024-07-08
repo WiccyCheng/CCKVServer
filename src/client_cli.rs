@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures::StreamExt;
-use kv::{CommandRequest, ProstClientStream, TlsClientConnector, YamuxBuilder};
+use kv::{AppStream, CommandRequest, TlsClientConnector, YamuxConn};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::collections::HashMap;
@@ -21,9 +21,8 @@ async fn main() -> Result<()> {
     let connector = TlsClientConnector::new("kvserver.acme.inc", client_identity, ca_cert)?;
     let stream = TcpStream::connect(addr).await?;
     let stream = connector.connect(stream).await?;
-    let mut connection = YamuxBuilder::new_client(stream, None);
-    let stream = connection.open_stream().await?;
-    let mut client = ProstClientStream::new(stream);
+    let mut connection = YamuxConn::new_client(stream, None);
+    let mut client = connection.open_stream().await?;
 
     let mut editor = DefaultEditor::new()?;
     if editor.load_history("history.txt").is_ok() {
@@ -103,8 +102,7 @@ async fn main() -> Result<()> {
                         }
 
                         let cmd = CommandRequest::new_subscribe(args[1]);
-                        let stream = connection.open_stream().await?;
-                        let client = ProstClientStream::new(stream);
+                        let client = connection.open_stream().await?;
                         let mut stream = client.execute_streaming(&cmd).await.unwrap();
                         topic_map.insert(args[1].to_owned(), stream.id);
                         tokio::spawn(async move {

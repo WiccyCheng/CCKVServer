@@ -9,14 +9,16 @@ use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompat
 use tracing::instrument;
 use yamux::{Config, Connection, ConnectionError, Mode};
 
+use crate::{AppStream, KvError, ProstClientStream};
+
 // Yamux 控制结构
-pub struct YamuxBuilder<S> {
+pub struct YamuxConn<S> {
     // sender 目前仅用于发送创建新的子流
     sender: mpsc::Sender<oneshot::Sender<Compat<yamux::Stream>>>,
     _s: PhantomData<S>,
 }
 
-impl<S> YamuxBuilder<S>
+impl<S> YamuxConn<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -91,24 +93,29 @@ where
             _s: Default::default(),
         }
     }
+}
+
+impl<S> AppStream for YamuxConn<S> {
+    type InnerStream = Compat<yamux::Stream>;
 
     // 打开一个新的 substream
     #[instrument(skip_all)]
-    pub async fn open_stream(&mut self) -> Result<Compat<yamux::Stream>, ConnectionError> {
+    async fn open_stream(&mut self) -> Result<ProstClientStream<Self::InnerStream>, KvError> {
         let (tx, rx) = oneshot::channel();
         let _ = self.sender.send(tx).await;
-        rx.await.map_err(|_| ConnectionError::Closed)
+        Ok(ProstClientStream::new(
+            rx.await.map_err(|_| ConnectionError::Closed)?,
+        ))
     }
 }
-
 #[cfg(test)]
 mod tests {
     use crate::{
         assert_res_ok,
         tls_utils::{tls_acceptor, tls_connector},
         utils::DummyStream,
-        CommandRequest, KvError, MemTable, ProstClientStream, ProstServerStream, Service,
-        ServiceInner, Storage, TlsServerAcceptor,
+        CommandRequest, KvError, MemTable, ProstServerStream, Service, ServiceInner, Storage,
+        TlsServerAcceptor,
     };
     use anyhow::Result;
     use std::net::SocketAddr;
@@ -121,7 +128,7 @@ mod tests {
     #[tokio::test]
     async fn yamux_creation_should_work() -> Result<()> {
         let s = DummyStream::default();
-        let mut client = YamuxBuilder::new_client(s, None);
+        let mut client = YamuxConn::new_client(s, None);
         let stream = client.open_stream().await;
 
         assert!(stream.is_ok());
@@ -138,18 +145,16 @@ mod tests {
         let stream = TcpStream::connect(addr).await?;
         let stream = connector.connect(stream).await?;
         // 创建使用 TLS 的 yamux client
-        let mut client = YamuxBuilder::new_client(stream, None);
+        let mut client = YamuxConn::new_client(stream, None);
 
-        // 从 client 中打开一个新的 substream
-        let stream = client.open_stream().await?;
-        // 封装成 ProstClientStream
-        let mut client = ProstClientStream::new(stream);
+        // 从 client 中打开一个新的 ProstClientStream substream
+        let mut stream = client.open_stream().await?;
 
         let cmd = CommandRequest::new_hset("table", "key", "value");
-        client.execute_unary(&cmd).await.unwrap();
+        stream.execute_unary(&cmd).await.unwrap();
 
         let cmd = CommandRequest::new_hget("table", "key");
-        let res = client.execute_unary(&cmd).await.unwrap();
+        let res = stream.execute_unary(&cmd).await.unwrap();
         assert_res_ok(&res, &["value".into()], &[]);
 
         Ok(())
@@ -195,7 +200,7 @@ mod tests {
         Service: From<ServiceInner<Store>>,
     {
         let f = |stream, service: Service| {
-            YamuxBuilder::new_server(stream, None, move |s| {
+            YamuxConn::new_server(stream, None, move |s| {
                 let svc = service.clone();
                 async move {
                     let stream = ProstServerStream::new(s.compat(), svc);
