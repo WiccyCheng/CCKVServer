@@ -9,14 +9,14 @@ path = "src/server.rs"
 
 [[bin]]
 name = "kvc"
-path = "src/client_cli.rs"
+path = "src/client.rs"
 
 [dependencies]
 anyhow = "1" # 错误处理
 bytes = "1" # 高效处理网络 buffer 的库
 dashmap = "6.0.1" # 并发 HashMap
 http = "1.1.0" # 我们使用 HTTP status code 所以引入这个类型库
-prost = "0.12.6" # 处理 protobuf 的代码
+prost = "0.13" # 处理 protobuf 的代码
 thiserror = "1" # 错误定义和处理
 tracing = "0.1" # 日志处理
 sled = "0.34" # sled db
@@ -60,7 +60,7 @@ criterion = { version = "0.5", features = [
 ] } #benchmark
 
 [build-dependencies]
-prost-build = "0.12.6" # 编译 protobuf
+prost-build = "0.13" # 编译 protobuf
 
 [[bench]]
 name = "pubsub"
