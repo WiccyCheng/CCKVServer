@@ -17,6 +17,12 @@ pub struct ClientConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum SecurityProtocol {
+    Tls,
+    Noise,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct LogConfig {
     pub path: String,
     pub rotation: RotationConfig,

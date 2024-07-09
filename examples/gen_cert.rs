@@ -25,6 +25,7 @@ fn create_ca() -> Result<CertPem> {
         "CN",
         "Acme Inc.",
         "Acme CA",
+        // 注意 s2n_quic 库的 tls 不支持 ED25519，需要用 EcDsa 生成，否则无法解析
         CertSigAlgo::ED25519,
         None,
         Some(10 * 365),
@@ -36,6 +37,8 @@ fn create_ca() -> Result<CertPem> {
     })
 }
 
+// domain 用于设置证书的 "Server Name Indication" (SNI) 值，客户端在 TLS 握手
+// 期间，可以通过 with_server_name 来指定期望的主机名，以此来防止中间人攻击
 fn create_cert(ca: &CA, domains: &[&str], cn: &str, is_client: bool) -> Result<CertPem> {
     let (days, cert_type) = if is_client {
         (Some(365), CertType::Client)
@@ -48,6 +51,7 @@ fn create_cert(ca: &CA, domains: &[&str], cn: &str, is_client: bool) -> Result<C
         "CN",
         "Acme Inc.",
         cn,
+        // 注意 s2n_quic 库的 tls 不支持 ED25519，需要用 EcDsa 生成，否则无法解析
         CertSigAlgo::ED25519,
         None,
         is_client,

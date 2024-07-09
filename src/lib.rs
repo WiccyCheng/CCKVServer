@@ -90,7 +90,8 @@ pub async fn start_quic_client_with_config(config: &ClientConfig) -> Result<Quic
         .start()
         .map_err(|e| anyhow!("Failed to start client. Error: {e}"))?;
 
-    let connect = Connect::new(addr).with_server_name("localhost");
+    // "Server Name Indication" (SNI) 在生成时证书设置，以绑定证书与特定主机，用于防止中间人攻击
+    let connect = Connect::new(addr).with_server_name("kvserver.acme.inc");
     let mut conn = client.connect(connect).await?;
 
     conn.keep_alive(true)?;
