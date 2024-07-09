@@ -1,34 +1,72 @@
-use std::time::Duration;
-
 use anyhow::Result;
+use futures::StreamExt;
 use kv::{
-    start_server_with_config, start_yamux_client_with_config, AppStream, ClientConfig,
-    CommandRequest, ServerConfig, StorageConfig,
+    start_quic_client_with_config, start_server_with_config, start_yamux_client_with_config,
+    AppStream, ClientConfig, CommandRequest, KvError, ProstClientStream,
 };
-use tokio::time;
+use std::time::Duration;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    time,
+};
+use tracing::info;
+
+#[tokio::test]
+async fn quic_server_client_full_tests() -> Result<()> {
+    // 启动服务器
+    let server_config = toml::from_str(include_str!("../fixtures/quic_server.conf"))?;
+    tokio::spawn(async move {
+        start_server_with_config(&server_config).await.unwrap();
+    });
+
+    let config: ClientConfig = toml::from_str(include_str!("../fixtures/quic_client.conf"))?;
+    let conn = start_quic_client_with_config(&config).await?;
+    process(conn).await?;
+
+    Ok(())
+}
 
 #[tokio::test]
 async fn yamux_server_client_full_tests() -> Result<()> {
-    let addr = "127.0.0.1:9731";
-    let mut config: ServerConfig = toml::from_str(include_str!("../fixtures/server.conf"))?;
-    config.general.addr = addr.into();
-    config.storage = StorageConfig::MemTable;
-
     // 启动服务器
+    let server_config = toml::from_str(include_str!("../fixtures/server.conf"))?;
     tokio::spawn(async move {
-        start_server_with_config(&config).await.unwrap();
+        start_server_with_config(&server_config).await.unwrap();
     });
 
-    time::sleep(Duration::from_millis(10)).await;
-    let mut config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
-    config.general.addr = addr.into();
+    let config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
+    let conn = start_yamux_client_with_config(&config).await?;
+    process(conn).await?;
 
-    let mut connection = start_yamux_client_with_config(&config).await.unwrap();
-    let mut client = connection.open_stream().await?;
+    Ok(())
+}
+
+async fn process<S, T>(mut conn: S) -> Result<()>
+where
+    S: AppStream<InnerStream = T>,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let channel = "lobby";
+    start_publishing(conn.open_stream().await?, channel)?;
+
+    let mut client = conn.open_stream().await?;
 
     // 生成一个 HSET 命令
     let cmd = CommandRequest::new_hset("table", "hello", "world");
-    client.execute_unary(&cmd).await?;
+
+    // 发送 HSET 命令
+    let data = client.execute_unary(&cmd).await?;
+    info!("Got response {:?}", data);
+
+    // 生成一个 Subscribe 命令
+    let cmd = CommandRequest::new_subscribe(channel);
+    let mut stream = conn.open_stream().await?.execute_streaming(&cmd).await?;
+    let id = stream.id;
+    start_unsubscribe(conn.open_stream().await?, channel, id)?;
+
+    while let Some(Ok(data)) = stream.next().await {
+        println!("Got published data: {:?}", data);
+    }
 
     // 生成一个 HGET 命令
     let cmd = CommandRequest::new_hget("table", "hello");
@@ -36,6 +74,38 @@ async fn yamux_server_client_full_tests() -> Result<()> {
 
     assert_eq!(data.status, 200);
     assert_eq!(data.values, &["world".into()]);
+
+    Ok(())
+}
+
+fn start_publishing<S>(mut stream: ProstClientStream<S>, name: &str) -> Result<(), KvError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let cmd = CommandRequest::new_publish(name, vec![1.into(), 2.into(), "hello".into()]);
+    tokio::spawn(async move {
+        time::sleep(Duration::from_millis(1000)).await;
+        let res = stream.execute_unary(&cmd).await.unwrap();
+        println!("Finished publishing: {:?}", res);
+    });
+
+    Ok(())
+}
+
+fn start_unsubscribe<S>(
+    mut stream: ProstClientStream<S>,
+    name: &str,
+    id: u32,
+) -> Result<(), KvError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let cmd = CommandRequest::new_unsubscribe(name, id as _);
+    tokio::spawn(async move {
+        time::sleep(Duration::from_millis(2000)).await;
+        let res = stream.execute_unary(&cmd).await.unwrap();
+        println!("Finished unsubscribing: {:?}", res);
+    });
 
     Ok(())
 }

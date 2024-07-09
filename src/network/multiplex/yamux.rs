@@ -113,7 +113,6 @@ mod tests {
     use crate::{
         assert_res_ok,
         tls_utils::{tls_acceptor, tls_connector},
-        utils::DummyStream,
         CommandRequest, KvError, MemTable, ProstServerStream, Service, ServiceInner, Storage,
         TlsServerAcceptor,
     };
@@ -124,16 +123,6 @@ mod tests {
     use tracing::warn;
 
     use super::*;
-
-    #[tokio::test]
-    async fn yamux_creation_should_work() -> Result<()> {
-        let s = DummyStream::default();
-        let mut client = YamuxConn::new_client(s, None);
-        let stream = client.open_stream().await;
-
-        assert!(stream.is_ok());
-        Ok(())
-    }
 
     #[tokio::test]
     async fn yamux_client_server_should_work() -> Result<()> {

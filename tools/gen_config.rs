@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     };
 
     let server_config = ServerConfig {
-        storage: kv::StorageConfig::Sledb("/tmp/kv_server".into()),
+        storage: kv::StorageConfig::MemTable,
         general: general_config.clone(),
         security: ServerTlsConfig {
             cert: SERVER_CERT.into(),
@@ -24,6 +24,9 @@ fn main() -> Result<()> {
             ca: Some(CA_CERT.into()),
         },
         log: LogConfig {
+            enable_jaeger: false,
+            enable_log_file: false,
+            log_level: "info".to_string(),
             path: "/tmp/kv-log".into(),
             rotation: RotationConfig::Daily,
         },

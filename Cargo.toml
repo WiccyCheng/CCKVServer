@@ -9,10 +9,6 @@ path = "src/server.rs"
 
 [[bin]]
 name = "kvc"
-path = "src/client.rs"
-
-[[bin]]
-name = "kvc_cli"
 path = "src/client_cli.rs"
 
 [dependencies]

@@ -1,3 +1,6 @@
+use crate::KvError;
+use std::io::Cursor;
+use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use tokio_rustls::rustls::server::WebPkiClientVerifier;
@@ -5,10 +8,6 @@ use tokio_rustls::rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio_rustls::{client::TlsStream as ClientTlsStream, server::TlsStream as ServerTlsStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use tracing::instrument;
-
-use crate::KvError;
-use std::io::Cursor;
-use std::sync::Arc;
 
 /// KV Server 自己的 ALPN (Application-Layer Protocol Negotiation)
 const ALPN_KV: &str = "kv";
@@ -25,8 +24,6 @@ pub struct TlsClientConnector {
     pub config: Arc<ClientConfig>,
     pub domain: Arc<String>,
 }
-
-pub struct TlsStream;
 
 impl TlsClientConnector {
     /// 加载 client cert / CA cert，生成 ClientConfig
