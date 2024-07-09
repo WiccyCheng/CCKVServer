@@ -1,13 +1,14 @@
 mod quic;
 mod yamux;
-
 pub use quic::*;
 pub use yamux::*;
 
 use crate::{KvError, ProstClientStream};
+use std::future::Future;
 
 pub trait AppStream {
     type InnerStream;
-    #[allow(async_fn_in_trait)]
-    async fn open_stream(&mut self) -> Result<ProstClientStream<Self::InnerStream>, KvError>;
+    fn open_stream(
+        &mut self,
+    ) -> impl Future<Output = Result<ProstClientStream<Self::InnerStream>, KvError>>;
 }

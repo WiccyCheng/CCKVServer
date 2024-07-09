@@ -1,7 +1,7 @@
 use std::{env, str::FromStr};
 
 use anyhow::Result;
-use kv::{start_server_with_config, RotationConfig, ServerConfig};
+use kv::{start_server_with_config, RotationConfig, ServerConfig, QUIC_SERVER_CONFIG};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{runtime, trace, Resource};
 use tokio::fs;
@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
     // 如果有环境变量，使用环境变量中的 config
     let config = match env::var("KV_SERVER_CONFIG") {
         Ok(path) => fs::read_to_string(&path).await?,
-        Err(_) => include_str!("../fixtures/quic_server.conf").to_string(),
+        Err(_) => QUIC_SERVER_CONFIG.to_string(),
     };
     let config: ServerConfig = toml::from_str(&config)?;
 

@@ -113,8 +113,8 @@ mod tests {
     use crate::{
         assert_res_ok,
         tls_utils::{tls_acceptor, tls_connector},
-        CommandRequest, KvError, MemTable, ProstServerStream, Service, ServiceInner, Storage,
-        TlsServerAcceptor,
+        CommandRequest, KvError, MemTable, ProstServerStream, SecureStreamAccept,
+        SecureStreamConnect, Service, ServiceInner, Storage, TlsServerAcceptor,
     };
     use anyhow::Result;
     use std::net::SocketAddr;

@@ -21,82 +21,131 @@ use tokio_rustls::client;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info, instrument, span};
 
+pub const QUIC_SERVER_CONFIG: &'static str = include_str!("../fixtures/quic/server.conf");
+pub const QUIC_CLIENT_CONFIG: &'static str = include_str!("../fixtures/quic/client.conf");
+
+pub const NOISE_SERVER_CONFIG: &'static str = include_str!("../fixtures/noise/server.conf");
+pub const NOISE_CLIENT_CONFIG: &'static str = include_str!("../fixtures/noise/client.conf");
+
+pub const TLS_SERVER_CONFIG: &'static str = include_str!("../fixtures/tls/server.conf");
+pub const TLS_CLIENT_CONFIG: &'static str = include_str!("../fixtures/tls/client.conf");
+pub const TLS_CA_CERT: &'static str = include_str!("../fixtures/tls/ca.cert");
+pub const TLS_CLIENT_CERT: &'static str = include_str!("../fixtures/tls/client.cert");
+pub const TLS_CLIENT_KEY: &'static str = include_str!("../fixtures/tls/client.key");
+pub const TLS_SERVER_CERT: &'static str = include_str!("../fixtures/tls/server.cert");
+pub const TLS_SERVER_KEY: &'static str = include_str!("../fixtures/tls/server.key");
+
 // 通过配置创建 KV 服务器
 #[instrument(name = "start_server_with_config", skip_all)]
 pub async fn start_server_with_config(config: &ServerConfig) -> Result<()> {
     let addr = &config.general.addr;
-    match config.general.network {
-        NetworkType::Tcp => {
-            let acceptor = TlsServerAcceptor::new(
-                &config.security.cert,
-                &config.security.key,
-                config.security.ca.as_deref(),
-            )?;
+    match &config.security {
+        ServerSecurityProtocol::Tls(tls_config) => match config.general.network {
+            NetworkType::Tcp => {
+                let acceptor = TlsServerAcceptor::new(
+                    &tls_config.cert,
+                    &tls_config.key,
+                    tls_config.ca.as_deref(),
+                )?;
 
+                match &config.storage {
+                    StorageConfig::MemTable => {
+                        start_yamux_server(addr, MemTable::new(), acceptor).await?
+                    }
+                    StorageConfig::Sledb(path) => {
+                        start_yamux_server(addr, SledDb::new(path), acceptor).await?
+                    }
+                    StorageConfig::Rocksdb(path) => {
+                        start_yamux_server(addr, RocksDB::new(path), acceptor).await?
+                    }
+                };
+            }
+            NetworkType::Quic => {
+                match &config.storage {
+                    StorageConfig::MemTable => {
+                        start_quic_server(addr, MemTable::new(), tls_config).await?
+                    }
+                    StorageConfig::Sledb(path) => {
+                        start_quic_server(addr, SledDb::new(path), tls_config).await?
+                    }
+                    StorageConfig::Rocksdb(path) => {
+                        start_quic_server(addr, RocksDB::new(path), tls_config).await?
+                    }
+                };
+            }
+        },
+        ServerSecurityProtocol::Noise => {
+            let acceptor = NoiseBuilder::new();
             match &config.storage {
                 StorageConfig::MemTable => {
-                    start_tls_server(addr, MemTable::new(), acceptor).await?
+                    start_yamux_server(addr, MemTable::new(), acceptor).await?
                 }
                 StorageConfig::Sledb(path) => {
-                    start_tls_server(addr, SledDb::new(path), acceptor).await?
+                    start_yamux_server(addr, SledDb::new(path), acceptor).await?
                 }
                 StorageConfig::Rocksdb(path) => {
-                    start_tls_server(addr, RocksDB::new(path), acceptor).await?
+                    start_yamux_server(addr, RocksDB::new(path), acceptor).await?
                 }
-            };
-        }
-        NetworkType::Quic => {
-            match &config.storage {
-                StorageConfig::MemTable => {
-                    start_quic_server(addr, MemTable::new(), &config.security).await?
-                }
-                StorageConfig::Sledb(path) => {
-                    start_quic_server(addr, SledDb::new(path), &config.security).await?
-                }
-                StorageConfig::Rocksdb(path) => {
-                    start_quic_server(addr, RocksDB::new(path), &config.security).await?
-                }
-            };
+            }
         }
     }
-
     Ok(())
 }
 
 #[instrument(name = "start_yamux_client_with_config", skip_all)]
-pub async fn start_yamux_client_with_config(
+pub async fn start_yamux_client_with_tls_config(
     config: &ClientConfig,
 ) -> Result<YamuxConn<client::TlsStream<TcpStream>>> {
     let addr = &config.general.addr;
-    let tls = &config.security;
+    if let ClientSecurityProtocol::Tls(tls) = &config.security {
+        let identity = tls.identity.as_ref().map(|(c, k)| (c.as_str(), k.as_str()));
+        let connector = TlsClientConnector::new(&tls.domain, identity, tls.ca.as_deref())?;
+        let stream = TcpStream::connect(addr).await?;
+        let stream = connector.connect(stream).await?;
 
-    let identity = tls.identity.as_ref().map(|(c, k)| (c.as_str(), k.as_str()));
-    let connector = TlsClientConnector::new(&tls.domain, identity, tls.ca.as_deref())?;
-    let stream = TcpStream::connect(addr).await?;
-    let stream = connector.connect(stream).await?;
+        // 打开一个 stream
+        Ok(YamuxConn::new_client(stream, None))
+    } else {
+        Err(anyhow!("client security protocol is not matched"))
+    }
+}
 
-    // 打开一个 stream
-    Ok(YamuxConn::new_client(stream, None))
+#[instrument(name = "start_yamux_client_with_config", skip_all)]
+pub async fn start_yamux_client_with_noise_config(
+    config: &ClientConfig,
+) -> Result<YamuxConn<NoiseInitiator<TcpStream>>> {
+    let addr = &config.general.addr;
+    if let ClientSecurityProtocol::Noise = &config.security {
+        let stream = TcpStream::connect(addr).await?;
+        let stream = NoiseBuilder::new().connect(stream).await?;
+
+        // 打开一个 stream
+        Ok(YamuxConn::new_client(stream, None))
+    } else {
+        Err(anyhow!("client security protocol is not matched"))
+    }
 }
 
 #[instrument(name = "start_quic_client_with_config", skip_all)]
 pub async fn start_quic_client_with_config(config: &ClientConfig) -> Result<QuicConn> {
     let addr = SocketAddr::from_str(&config.general.addr)?;
-    let tls = &config.security;
+    if let ClientSecurityProtocol::Tls(tls) = &config.security {
+        let client = Client::builder()
+            .with_tls(tls.ca.as_ref().unwrap().as_str())?
+            .with_io("0.0.0.0:0")?
+            .start()
+            .map_err(|e| anyhow!("Failed to start client. Error: {e}"))?;
 
-    let client = Client::builder()
-        .with_tls(tls.ca.as_ref().unwrap().as_str())?
-        .with_io("0.0.0.0:0")?
-        .start()
-        .map_err(|e| anyhow!("Failed to start client. Error: {e}"))?;
+        // "Server Name Indication" (SNI) 在生成时证书设置，以绑定证书与特定主机，用于防止中间人攻击
+        let connect = Connect::new(addr).with_server_name("kvserver.acme.inc");
+        let mut conn = client.connect(connect).await?;
 
-    // "Server Name Indication" (SNI) 在生成时证书设置，以绑定证书与特定主机，用于防止中间人攻击
-    let connect = Connect::new(addr).with_server_name("kvserver.acme.inc");
-    let mut conn = client.connect(connect).await?;
+        conn.keep_alive(true)?;
 
-    conn.keep_alive(true)?;
-
-    Ok(QuicConn::new(conn))
+        Ok(QuicConn::new(conn))
+    } else {
+        Err(anyhow!("client security protocol is not matched"))
+    }
 }
 
 pub async fn start_quic_server<Store: Storage>(
@@ -140,22 +189,26 @@ pub async fn start_quic_server<Store: Storage>(
     }
 }
 
-async fn start_tls_server<Store: Storage>(
+async fn start_yamux_server<Store, Acceptor>(
     addr: &str,
     store: Store,
-    acceptor: TlsServerAcceptor,
-) -> Result<()> {
+    acceptor: Acceptor,
+) -> Result<()>
+where
+    Store: Storage,
+    Acceptor: SecureStreamAccept<tokio::net::TcpStream> + Clone + Send + 'static,
+{
     let service: Service<Store> = ServiceInner::new(store).into();
     let listener = TcpListener::bind(addr).await?;
     info!("Start listening on {addr}");
     loop {
-        let tls = acceptor.clone();
+        let acceptor = acceptor.clone();
         let (stream, addr) = listener.accept().await?;
         info!("Client {addr:?} connected");
 
         let svc = service.clone();
         tokio::spawn(async move {
-            let stream = tls.accept(stream).await.unwrap();
+            let stream = acceptor.accept(stream).await.unwrap();
             YamuxConn::new_server(stream, None, move |stream| {
                 let svc = svc.clone();
                 async move {

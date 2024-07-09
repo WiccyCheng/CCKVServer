@@ -1,4 +1,4 @@
-use crate::KvError;
+use crate::{KvError, SecureStreamAccept, SecureStreamConnect};
 use std::io::Cursor;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -73,13 +73,16 @@ impl TlsClientConnector {
             domain: Arc::new(domain.into()),
         })
     }
+}
 
+impl<S> SecureStreamConnect<S> for TlsClientConnector
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin,
+{
+    type InnerStream = ClientTlsStream<S>;
     /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
     #[instrument(name = "tls_client_connect", skip_all)]
-    pub async fn connect<S>(&self, stream: S) -> Result<ClientTlsStream<S>, KvError>
-    where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
-    {
+    async fn connect(&self, stream: S) -> Result<Self::InnerStream, KvError> {
         let dns = ServerName::try_from(self.domain.as_str())
             .map_err(|_| KvError::Internal("Invalid DNS name".to_string()))?;
 
@@ -127,12 +130,15 @@ impl TlsServerAcceptor {
             inner: Arc::new(config),
         })
     }
+}
 
+impl<S> SecureStreamAccept<S> for TlsServerAcceptor
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin,
+{
+    type InnerStream = ServerTlsStream<S>;
     #[instrument(name = "tls_server_accept", skip_all)]
-    pub async fn accept<S>(&self, stream: S) -> Result<ServerTlsStream<S>, KvError>
-    where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
-    {
+    async fn accept(&self, stream: S) -> Result<Self::InnerStream, KvError> {
         let acceptor = TlsAcceptor::from(self.inner.clone());
         Ok(acceptor.accept(stream).await?)
     }
@@ -266,17 +272,14 @@ mod tests {
 
 #[cfg(test)]
 pub mod tls_utils {
-    use crate::{KvError, TlsClientConnector, TlsServerAcceptor};
-
-    const CA_CERT: &str = include_str!("../../../fixtures/ca.cert");
-    const CLIENT_CERT: &str = include_str!("../../../fixtures/client.cert");
-    const CLIENT_KEY: &str = include_str!("../../../fixtures/client.key");
-    const SERVER_CERT: &str = include_str!("../../../fixtures/server.cert");
-    const SERVER_KEY: &str = include_str!("../../../fixtures/server.key");
+    use crate::{
+        KvError, TlsClientConnector, TlsServerAcceptor, TLS_CA_CERT, TLS_CLIENT_CERT,
+        TLS_CLIENT_KEY, TLS_SERVER_CERT, TLS_SERVER_KEY,
+    };
 
     pub fn tls_connector(client_cert: bool) -> Result<TlsClientConnector, KvError> {
-        let ca = Some(CA_CERT);
-        let client_identity = Some((CLIENT_CERT, CLIENT_KEY));
+        let ca = Some(TLS_CA_CERT);
+        let client_identity = Some((TLS_CLIENT_CERT, TLS_CLIENT_KEY));
 
         match client_cert {
             false => TlsClientConnector::new("kvserver.acme.inc", None, ca),
@@ -285,10 +288,10 @@ pub mod tls_utils {
     }
 
     pub fn tls_acceptor(client_cert: bool) -> Result<TlsServerAcceptor, KvError> {
-        let ca = Some(CA_CERT);
+        let ca = Some(TLS_CA_CERT);
         match client_cert {
-            true => TlsServerAcceptor::new(SERVER_CERT, SERVER_KEY, ca),
-            false => TlsServerAcceptor::new(SERVER_CERT, SERVER_KEY, None),
+            true => TlsServerAcceptor::new(TLS_SERVER_CERT, TLS_SERVER_KEY, ca),
+            false => TlsServerAcceptor::new(TLS_SERVER_CERT, TLS_SERVER_KEY, None),
         }
     }
 }

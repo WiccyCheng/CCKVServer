@@ -1,8 +1,10 @@
 use anyhow::Result;
 use futures::StreamExt;
 use kv::{
-    start_quic_client_with_config, start_server_with_config, start_yamux_client_with_config,
-    AppStream, ClientConfig, CommandRequest, KvError, ProstClientStream,
+    start_quic_client_with_config, start_server_with_config, start_yamux_client_with_noise_config,
+    start_yamux_client_with_tls_config, AppStream, ClientConfig, CommandRequest, KvError,
+    ProstClientStream, NOISE_CLIENT_CONFIG, NOISE_SERVER_CONFIG, QUIC_CLIENT_CONFIG,
+    QUIC_SERVER_CONFIG, TLS_CLIENT_CONFIG, TLS_SERVER_CONFIG,
 };
 use std::time::Duration;
 use tokio::{
@@ -14,12 +16,12 @@ use tracing::info;
 #[tokio::test]
 async fn quic_server_client_full_tests() -> Result<()> {
     // 启动服务器
-    let server_config = toml::from_str(include_str!("../fixtures/quic_server.conf"))?;
+    let server_config = toml::from_str(QUIC_SERVER_CONFIG)?;
     tokio::spawn(async move {
         start_server_with_config(&server_config).await.unwrap();
     });
 
-    let config: ClientConfig = toml::from_str(include_str!("../fixtures/quic_client.conf"))?;
+    let config: ClientConfig = toml::from_str(QUIC_CLIENT_CONFIG)?;
     let conn = start_quic_client_with_config(&config).await?;
     process(conn).await?;
 
@@ -29,13 +31,31 @@ async fn quic_server_client_full_tests() -> Result<()> {
 #[tokio::test]
 async fn yamux_server_client_full_tests() -> Result<()> {
     // 启动服务器
-    let server_config = toml::from_str(include_str!("../fixtures/server.conf"))?;
+    let server_config = toml::from_str(TLS_SERVER_CONFIG)?;
     tokio::spawn(async move {
         start_server_with_config(&server_config).await.unwrap();
     });
 
-    let config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
-    let conn = start_yamux_client_with_config(&config).await?;
+    let config: ClientConfig = toml::from_str(TLS_CLIENT_CONFIG)?;
+    let conn = start_yamux_client_with_tls_config(&config).await?;
+    process(conn).await?;
+
+    Ok(())
+}
+
+// TODO(Wiccy): Currently noise can not work with yamux, so skip this
+// #[tokio::test]
+#[allow(dead_code)]
+async fn noise_server_client_full_tests() -> Result<()> {
+    // 启动服务器
+    let server_config = toml::from_str(NOISE_SERVER_CONFIG)?;
+    tokio::spawn(async move {
+        start_server_with_config(&server_config).await.unwrap();
+    });
+
+    let config: ClientConfig = toml::from_str(NOISE_CLIENT_CONFIG)?;
+    let conn = start_yamux_client_with_noise_config(&config).await?;
+
     process(conn).await?;
 
     Ok(())

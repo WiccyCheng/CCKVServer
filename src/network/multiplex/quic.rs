@@ -30,26 +30,23 @@ mod tests {
 
     use crate::{
         start_quic_client_with_config, start_quic_server, ClientConfig, MemTable, ServerConfig,
+        ServerSecurityProtocol, QUIC_CLIENT_CONFIG, QUIC_SERVER_CONFIG,
     };
 
     use super::*;
 
     #[tokio::test]
     async fn quic_creation_should_work() -> Result<()> {
-        let server_config: ServerConfig =
-            toml::from_str(include_str!("../../../fixtures/quic_server.conf")).unwrap();
+        let server_config: ServerConfig = toml::from_str(QUIC_SERVER_CONFIG).unwrap();
         tokio::spawn(async move {
-            start_quic_server(
-                &server_config.general.addr,
-                MemTable::new(),
-                &server_config.security,
-            )
-            .await
-            .unwrap()
+            if let ServerSecurityProtocol::Tls(tls) = &server_config.security {
+                start_quic_server(&server_config.general.addr, MemTable::new(), tls)
+                    .await
+                    .unwrap()
+            }
         });
 
-        let client_config: ClientConfig =
-            toml::from_str(include_str!("../../../fixtures/quic_client.conf")).unwrap();
+        let client_config: ClientConfig = toml::from_str(QUIC_CLIENT_CONFIG).unwrap();
         let mut client = start_quic_client_with_config(&client_config).await.unwrap();
         let stream = client.open_stream().await;
         assert!(stream.is_ok());

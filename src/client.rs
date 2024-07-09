@@ -1,8 +1,8 @@
 use anyhow::Result;
 use futures::StreamExt;
 use kv::{
-    start_quic_client_with_config, start_yamux_client_with_config, AppStream, ClientConfig,
-    CommandRequest, NetworkType,
+    start_quic_client_with_config, start_yamux_client_with_tls_config, AppStream, ClientConfig,
+    CommandRequest, NetworkType, QUIC_CLIENT_CONFIG,
 };
 use rustyline::{error::ReadlineError, DefaultEditor};
 use std::collections::HashMap;
@@ -11,12 +11,12 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let config: ClientConfig = toml::from_str(include_str!("../fixtures/quic_client.conf"))?;
+    let config: ClientConfig = toml::from_str(QUIC_CLIENT_CONFIG)?;
 
     // 打开一个 multiplex conn
     match config.general.network {
         NetworkType::Tcp => {
-            let conn = start_yamux_client_with_config(&config).await?;
+            let conn = start_yamux_client_with_tls_config(&config).await?;
             process(conn).await?;
         }
         NetworkType::Quic => {

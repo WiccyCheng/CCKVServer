@@ -2,8 +2,8 @@ use anyhow::Result;
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
 use kv::{
-    start_server_with_config, start_yamux_client_with_config, AppStream, ClientConfig,
-    CommandRequest, ServerConfig, StorageConfig, YamuxConn,
+    start_server_with_config, start_yamux_client_with_tls_config, AppStream, ClientConfig,
+    CommandRequest, ServerConfig, StorageConfig, YamuxConn, TLS_CLIENT_CONFIG, TLS_SERVER_CONFIG,
 };
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{runtime, trace, Resource};
@@ -16,7 +16,7 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 async fn start_server() -> Result<()> {
     let addr = "127.0.0.1:1973";
-    let mut config: ServerConfig = toml::from_str(include_str!("../fixtures/server.conf"))?;
+    let mut config: ServerConfig = toml::from_str(TLS_SERVER_CONFIG)?;
     config.general.addr = addr.into();
     config.storage = StorageConfig::MemTable;
 
@@ -29,10 +29,10 @@ async fn start_server() -> Result<()> {
 
 async fn connect() -> Result<YamuxConn<TlsStream<TcpStream>>> {
     let addr = "127.0.0.1:1973";
-    let mut config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
+    let mut config: ClientConfig = toml::from_str(TLS_CLIENT_CONFIG)?;
     config.general.addr = addr.into();
 
-    Ok(start_yamux_client_with_config(&config).await?)
+    Ok(start_yamux_client_with_tls_config(&config).await?)
 }
 
 async fn start_subscribers(topic: &'static str) -> Result<()> {

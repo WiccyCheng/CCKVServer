@@ -1,28 +1,67 @@
-use std::fs;
-
 use ::anyhow::Result;
+use clap::{Parser, ValueEnum};
 use kv::{
-    ClientConfig, ClientTlsConfig, GeneralConfig, LogConfig, RotationConfig, ServerConfig,
-    ServerTlsConfig,
+    ClientConfig, ClientSecurityProtocol, ClientTlsConfig, GeneralConfig, LogConfig, NetworkType,
+    RotationConfig, ServerConfig, ServerSecurityProtocol, ServerTlsConfig, StorageConfig,
+    TLS_CA_CERT, TLS_CLIENT_CERT, TLS_CLIENT_KEY, TLS_SERVER_CERT, TLS_SERVER_KEY,
 };
+use std::{env, fs};
+
+#[derive(Debug, Parser)]
+#[clap(
+    name = "Server & Client Config Generator",
+    about = "help generating client and server config"
+)]
+struct Args {
+    #[clap(short, long, value_enum)]
+    protocol: Protocol,
+}
+
+#[derive(Debug, ValueEnum, Clone)]
+enum Protocol {
+    Tls,
+    Noise,
+    Quic,
+}
+
 fn main() -> Result<()> {
-    const CA_CERT: &str = include_str!("../fixtures/ca.cert");
-    const SERVER_CERT: &str = include_str!("../fixtures/server.cert");
-    const SERVER_KEY: &str = include_str!("../fixtures/server.key");
+    let args = Args::parse();
+
+    let dir = env::current_dir().expect("Failed to get current directory");
+
+    let security_type = args.protocol;
 
     let general_config = GeneralConfig {
         addr: "127.0.0.1:1973".into(),
-        network: kv::NetworkType::Tcp,
+        network: match security_type {
+            Protocol::Tls => NetworkType::Tcp,
+            Protocol::Noise => NetworkType::Tcp,
+            Protocol::Quic => NetworkType::Quic,
+        },
     };
 
+    let (s_security, c_security) = gen_security_protocol(&security_type);
+    let (s_conf_path, c_conf_path) = match security_type {
+        Protocol::Tls => (
+            dir.join("fixtures/tls/server.conf"),
+            dir.join("fixtures/tls/client.conf"),
+        ),
+        Protocol::Noise => (
+            dir.join("fixtures/noise/server.conf"),
+            dir.join("fixtures/noise/client.conf"),
+        ),
+        Protocol::Quic => (
+            dir.join("fixtures/quic/server.conf"),
+            dir.join("fixtures/quic/client.conf"),
+        ),
+    };
+    println!("server.conf will be placed at: {s_conf_path:?}");
+    println!("client.conf will be placed at: {c_conf_path:?}");
+
     let server_config = ServerConfig {
-        storage: kv::StorageConfig::MemTable,
+        storage: StorageConfig::MemTable,
         general: general_config.clone(),
-        security: ServerTlsConfig {
-            cert: SERVER_CERT.into(),
-            key: SERVER_KEY.into(),
-            ca: Some(CA_CERT.into()),
-        },
+        security: s_security,
         log: LogConfig {
             enable_jaeger: false,
             enable_log_file: false,
@@ -32,27 +71,33 @@ fn main() -> Result<()> {
         },
     };
 
-    fs::write(
-        "fixtures/server.conf",
-        toml::to_string_pretty(&server_config)?,
-    )?;
-
-    const CLIENT_CERT: &str = include_str!("../fixtures/client.cert");
-    const CLIENT_KEY: &str = include_str!("../fixtures/client.key");
+    fs::write(s_conf_path, toml::to_string_pretty(&server_config)?)?;
 
     let client_config = ClientConfig {
         general: general_config,
-        security: ClientTlsConfig {
-            identity: Some((CLIENT_CERT.into(), CLIENT_KEY.into())),
-            ca: Some(CA_CERT.into()),
-            domain: "kvserver.acme.inc".into(),
-        },
+        security: c_security,
     };
 
-    fs::write(
-        "fixtures/client.conf",
-        toml::to_string_pretty(&client_config)?,
-    )?;
+    fs::write(c_conf_path, toml::to_string_pretty(&client_config)?)?;
 
     Ok(())
+}
+
+fn gen_security_protocol(s: &Protocol) -> (ServerSecurityProtocol, ClientSecurityProtocol) {
+    match s {
+        Protocol::Tls => (
+            ServerSecurityProtocol::Tls(ServerTlsConfig {
+                cert: TLS_SERVER_CERT.into(),
+                key: TLS_SERVER_KEY.into(),
+                ca: Some(TLS_CA_CERT.into()),
+            }),
+            ClientSecurityProtocol::Tls(ClientTlsConfig {
+                identity: Some((TLS_CLIENT_CERT.into(), TLS_CLIENT_KEY.into())),
+                ca: Some(TLS_CA_CERT.into()),
+                domain: "kvserver.acme.inc".into(),
+            }),
+        ),
+        Protocol::Noise => (ServerSecurityProtocol::Noise, ClientSecurityProtocol::Noise),
+        Protocol::Quic => todo!(),
+    }
 }

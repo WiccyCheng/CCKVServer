@@ -6,19 +6,25 @@ use std::fs;
 pub struct ServerConfig {
     pub general: GeneralConfig,
     pub storage: StorageConfig,
-    pub security: ServerTlsConfig,
+    pub security: ServerSecurityProtocol,
     pub log: LogConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ClientConfig {
     pub general: GeneralConfig,
-    pub security: ClientTlsConfig,
+    pub security: ClientSecurityProtocol,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum SecurityProtocol {
-    Tls,
+pub enum ServerSecurityProtocol {
+    Tls(ServerTlsConfig),
+    Noise,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum ClientSecurityProtocol {
+    Tls(ClientTlsConfig),
     Noise,
 }
 
@@ -97,19 +103,19 @@ impl ClientConfig {
 
 #[cfg(test)]
 mod tests {
+    use crate::{TLS_CLIENT_CONFIG, TLS_SERVER_CONFIG};
+
     use super::*;
 
     #[test]
     fn server_config_should_be_loaded() {
-        let result: Result<ServerConfig, toml::de::Error> =
-            toml::from_str(include_str!("../fixtures/server.conf"));
+        let result: Result<ServerConfig, toml::de::Error> = toml::from_str(TLS_SERVER_CONFIG);
         assert!(result.is_ok())
     }
 
     #[test]
     fn client_config_should_be_loaded() {
-        let result: Result<ClientConfig, toml::de::Error> =
-            toml::from_str(include_str!("../fixtures/client.conf"));
+        let result: Result<ClientConfig, toml::de::Error> = toml::from_str(TLS_CLIENT_CONFIG);
         assert!(result.is_ok())
     }
 }
