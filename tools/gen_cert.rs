@@ -26,7 +26,7 @@ fn create_ca() -> Result<CertPem> {
         "Acme Inc.",
         "Acme CA",
         // 注意 s2n_quic 库的 tls 不支持 ED25519，需要用 EcDsa 生成，否则无法解析
-        CertSigAlgo::ED25519,
+        CertSigAlgo::EcDsa,
         None,
         Some(10 * 365),
     )?;
@@ -52,7 +52,7 @@ fn create_cert(ca: &CA, domains: &[&str], cn: &str, is_client: bool) -> Result<C
         "Acme Inc.",
         cn,
         // 注意 s2n_quic 库的 tls 不支持 ED25519，需要用 EcDsa 生成，否则无法解析
-        CertSigAlgo::ED25519,
+        CertSigAlgo::EcDsa,
         None,
         is_client,
         days,

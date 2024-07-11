@@ -23,6 +23,11 @@ use tracing::{info, instrument, span};
 
 pub const QUIC_SERVER_CONFIG: &'static str = include_str!("../fixtures/quic/server.conf");
 pub const QUIC_CLIENT_CONFIG: &'static str = include_str!("../fixtures/quic/client.conf");
+pub const QUIC_CA_CERT: &'static str = include_str!("../fixtures/quic/ca.cert");
+pub const QUIC_CLIENT_CERT: &'static str = include_str!("../fixtures/quic/client.cert");
+pub const QUIC_CLIENT_KEY: &'static str = include_str!("../fixtures/quic/client.key");
+pub const QUIC_SERVER_CERT: &'static str = include_str!("../fixtures/quic/server.cert");
+pub const QUIC_SERVER_KEY: &'static str = include_str!("../fixtures/quic/server.key");
 
 pub const NOISE_SERVER_CONFIG: &'static str = include_str!("../fixtures/noise/server.conf");
 pub const NOISE_CLIENT_CONFIG: &'static str = include_str!("../fixtures/noise/client.conf");

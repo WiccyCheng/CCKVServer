@@ -1,6 +1,7 @@
 use crate::KvError;
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, str::FromStr};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ServerConfig {
@@ -37,11 +38,29 @@ pub struct LogConfig {
     pub rotation: RotationConfig,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+impl Default for LogConfig {
+    fn default() -> Self {
+        LogConfig {
+            enable_log_file: false,
+            enable_jaeger: false,
+            log_level: "info".to_string(),
+            path: "/tmp/kv-log".into(),
+            rotation: RotationConfig::Daily,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ValueEnum)]
 pub enum RotationConfig {
     Hourly,
     Daily,
     Never,
+}
+
+impl Default for RotationConfig {
+    fn default() -> Self {
+        RotationConfig::Daily
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -69,6 +88,25 @@ pub enum StorageConfig {
     MemTable,
     Sledb(String),
     Rocksdb(String),
+}
+
+impl FromStr for StorageConfig {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "memtable" => Ok(StorageConfig::MemTable),
+            "sledb" => Ok(StorageConfig::Sledb("tmp/sledb".to_string())), // Adjust the path as needed
+            "rocksdb" => Ok(StorageConfig::Rocksdb("tmp/rocksdb".to_string())), // Adjust the path as needed
+            _ => Err(format!("'{}' is not a valid value for StorageConfig", s)),
+        }
+    }
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        StorageConfig::MemTable
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
