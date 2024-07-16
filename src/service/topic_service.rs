@@ -5,7 +5,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::{CommandResponse, Publish, Subscribe, Topic, Unsubscribe};
 
 pub type StreamingResponse = BoxStream<'static, Arc<CommandResponse>>;
-// pub type StreamingResponse = Pin<Box<dyn Stream<Item = Arc<CommandResponse>> + Send>>;
 
 pub trait TopicService {
     /// 处理 Command，返回 Response
